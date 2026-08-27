@@ -27,7 +27,11 @@
             <!-- 搜索区 -->
             <div class="section">
                 <h3>单词查询</h3>
-                <div class="remain-count" id="dictStatus">词典未加载</div>
+                <div class="dict-toolbar">
+                    <div class="remain-count" id="dictStatus">词典未加载</div>
+                    <span class="dict-total">应载 <b id="dictExpectedCount">770,612</b> 词</span>
+                    <button id="reimportBtn" onclick="reimportDict()">重新导入</button>
+                </div>
                 <div class="search-box">
                     <input type="search" id="searchInput" placeholder="输入英文单词，按回车查询" onkeydown="if(event.key==='Enter')searchWord()">
                     <button onclick="searchWord()" id="searchBtn" disabled>查询</button>
