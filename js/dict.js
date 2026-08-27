@@ -122,6 +122,44 @@ function setDictStatus(text) {
     if (el) el.textContent = text;
 }
 
+// ---------- 重新导入词典 ----------
+async function reimportDict() {
+    if (!confirm('重新导入将清空当前词典数据并重新下载（约需1-3分钟），是否继续？')) return;
+    const btn = document.getElementById('reimportBtn');
+    const searchBtn = document.getElementById('searchBtn');
+    if (btn) btn.disabled = true;
+    setDictStatus('正在清空旧词典...');
+    try {
+        const db = await openDictDB();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(DICT_STORE_WORDS, 'readwrite');
+            tx.objectStore(DICT_STORE_WORDS).clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = (e) => reject(e.target.error);
+        });
+        // 重置内存状态，强制重新导入
+        window.dictLoaded = false;
+        window.dictData = null;
+        window.dictLoading = false;
+        window.dictAutoImporting = false;
+        if (searchBtn) searchBtn.disabled = true;
+        await autoImportDictFromCSV();
+        // 更新状态
+        if (window.dictLoaded) {
+            setDictStatus('词典已加载：' + window.dictData.size + ' 个单词');
+            if (searchBtn) searchBtn.disabled = false;
+        } else {
+            setDictStatus('词典未加载');
+        }
+    } catch (e) {
+        console.error('重新导入失败', e);
+        alert('重新导入失败：' + e.message);
+        setDictStatus('词典未加载');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
 // ---------- 导入词典 ----------
 async function importDict() {
     const fileInput = document.getElementById('csvFile');
