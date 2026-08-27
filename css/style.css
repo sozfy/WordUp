@@ -2130,3 +2130,40 @@ input[type="file"] {
     line-height: 1;
     margin-bottom: 0;
 }
+
+/* 查单词：词典状态工具行（状态 + 应载词数 + 重新导入按钮） */
+.dict-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.dict-total {
+    font-size: 13px;
+    color: #9aa0a6;
+}
+.dict-total b {
+    color: #1981CA;
+    font-weight: 600;
+}
+#reimportBtn {
+    margin-left: auto;
+    font-size: 13px;
+    padding: 4px 14px;
+    border-radius: 6px;
+    border: 1px solid #5a5c66;
+    background: transparent;
+    color: #d9dce1;
+    cursor: pointer;
+    transition: background .2s, border-color .2s, color .2s;
+}
+#reimportBtn:hover {
+    background: #3a3c44;
+    border-color: #1981CA;
+    color: #fff;
+}
+#reimportBtn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
