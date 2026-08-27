@@ -1,5 +1,5 @@
-# ---- 词典数据（约 63MB，体积过大不纳入版本控制）----
-# 从 https://github.com/skywind3000/ECDICT 下载 ecdict.csv 放入 data/ 目录
+# ---- 词典数据（约 63MB，超过 GitHub 上传限制，不纳入版本控制）----
+# 应用会自动从 ECDICT GitHub 仓库在线获取；如需本地自备，放入 data/ecdict.csv
 data/ecdict.csv
 
 # ---- 系统 / IDE ----

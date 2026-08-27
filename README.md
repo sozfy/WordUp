@@ -53,13 +53,15 @@ python -m http.server 8000
 
 ### 词典数据（ecdict.csv）
 
-`data/ecdict.csv` 为 ECDICT 词库（约 63MB），由于体积较大未纳入版本控制。查单词功能需要该文件：
+`ecdict.csv` 为 ECDICT 词库（约 63MB），超过 GitHub 单文件上传限制，**不随仓库分发**。首次打开查单词页时，应用会自动从 ECDICT GitHub 仓库**在线获取**并导入到浏览器 IndexedDB（约 1-3 分钟，有进度提示）。
 
-- 从 [skywind3000/ECDICT](https://github.com/skywind3000/ECDICT) 下载 `ecdict.csv`
-- 放入 `data/` 目录
-- 首次打开查单词页会自动导入到浏览器 IndexedDB（约 1-3 分钟，进度提示）
+词典获取优先级：
 
-> 未放置 ecdict.csv 时，**背单词**功能（基于预生成的 preset_data.js）仍可正常使用。
+1. 本地 `data/ecdict.csv`（如你自行放置）
+2. [skywind3000/ECDICT](https://github.com/skywind3000/ECDICT) 仓库在线下载
+   `https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv`
+
+> 未放置本地 ecdict.csv 或网络不可用时，**背单词**功能（基于预生成的 preset_data.js）仍可正常使用；查单词需在联网状态下完成首次导入。
 
 ## 🛠 预设词表重新生成
 
