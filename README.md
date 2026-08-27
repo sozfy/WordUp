@@ -1,0 +1,82 @@
+# 📖 背单词（Word Memorizer）
+
+一个纯前端、本地化的英语背单词 + 离线词典查询工具。所有数据保存在浏览器本地（localStorage / IndexedDB），无需联网、无需服务器。
+
+## ✨ 功能特性
+
+- **背单词**：批量添加单词、按词表随机抽背，认识/不认识分类记忆，支持选择题模式
+- **单词列表管理**：多个独立词表，可新增/删除/改名/查看，可切换词表进行随机抽词
+- **预设词表**：内置中考、高考、四六级、考研、雅思、托福、GRE 词表（基于 ECDICT 词库 tag 预生成）
+- **查单词**：基于 ECDICT 词库的离线词典查询，支持输入联想（按词频排序）、模糊匹配
+- **词条详情**：音标、词性、中英释义、时态变化、考试标签一目了然
+- **本地存储**：词表数据存 localStorage，词典数据存 IndexedDB，隐私安全
+
+## 🗂 目录结构
+
+```
+背单词-GitHub/
+├── index.html              # 入口主页
+├── WordMemorizer.html      # 背单词页
+├── DictLookup.html         # 查单词页
+├── css/
+│   └── style.css           # 全局样式
+├── js/
+│   ├── common.js           # 共享逻辑（词典加载、自动导入、存储用量）
+│   ├── script.js           # 背单词页逻辑
+│   ├── dict.js             # 查单词页逻辑
+│   └── generate_preset.js  # 预设词表生成脚本（Node.js）
+├── data/
+│   ├── preset_data.js      # 预生成的预设词表（已提交）
+│   └── ecdict.csv          # ECDICT 词典（见下方说明，未纳入版本控制）
+├── README.md
+├── LICENSE
+└── .gitignore
+```
+
+## 🚀 使用说明
+
+### 方式一：本地直接打开
+
+直接双击打开 `index.html` 即可使用（推荐用本地 HTTP 服务器以获得最佳体验）：
+
+```bash
+# 在项目根目录启动本地服务器
+python -m http.server 8000
+# 然后访问 http://localhost:8000
+```
+
+### 方式二：部署到 GitHub Pages
+
+1. 将本仓库 fork / push 到你的 GitHub 账号
+2. 进入仓库 Settings → Pages → 选择分支发布
+3. 访问 `https://<你的用户名>.github.io/<仓库名>/`
+
+### 词典数据（ecdict.csv）
+
+`data/ecdict.csv` 为 ECDICT 词库（约 63MB），由于体积较大未纳入版本控制。查单词功能需要该文件：
+
+- 从 [skywind3000/ECDICT](https://github.com/skywind3000/ECDICT) 下载 `ecdict.csv`
+- 放入 `data/` 目录
+- 首次打开查单词页会自动导入到浏览器 IndexedDB（约 1-3 分钟，进度提示）
+
+> 未放置 ecdict.csv 时，**背单词**功能（基于预生成的 preset_data.js）仍可正常使用。
+
+## 🛠 预设词表重新生成
+
+预设词表已预生成并提交。如需基于新版 ecdict.csv 重新生成：
+
+```bash
+cd js
+node generate_preset.js
+```
+
+脚本读取 `data/ecdict.csv`，按 tag 分类生成 `data/preset_data.js`。
+
+## 📊 数据来源
+
+- 词典数据：[ECDICT](https://github.com/skywind3000/ECDICT)（MIT License，免费开源英汉词典）
+- 本项目为 ECDICT 的本地化应用封装
+
+## 📄 License
+
+[MIT](LICENSE)

@@ -1,0 +1,24 @@
+# ---- 词典数据（约 63MB，体积过大不纳入版本控制）----
+# 从 https://github.com/skywind3000/ECDICT 下载 ecdict.csv 放入 data/ 目录
+data/ecdict.csv
+
+# ---- 系统 / IDE ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Node.js ----
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# ---- 构建产物（如本地打包 APK）----
+apk-build/
+*.apk
+*.zip
+
+# ---- 临时脚本 ----
+_fix*.py
+_inspect*.py
+_verify*.py
+_organize*.py
