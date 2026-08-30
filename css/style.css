@@ -1508,6 +1508,19 @@ h1 {
 
 }
 
+/* 词意互换：意思用小字号（绿）、单词用大字号（白），位置不变 */
+#currentWord.swap-mode {
+    font-size: 1.1rem;
+    font-weight: normal;
+    color: #67c23a;
+}
+#currentMeaning.swap-mode {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+
 
 
 /* ---------- 开�?---------- */
@@ -2166,4 +2179,179 @@ input[type="file"] {
 #reimportBtn:disabled {
     opacity: .5;
     cursor: not-allowed;
+}
+
+/* 查看单词列表：拆分数量输入 + 拆分按钮 */
+.split-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 0.4rem 0 0.6rem;
+}
+
+/* 合并词表行 */
+.merge-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 0.6rem;
+}
+.merge-row select {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #5a5c66;
+    background: #3a3c44;
+    color: #fff;
+    font-size: 14px;
+}
+.merge-row select:focus {
+    outline: none;
+    border-color: #1981CA;
+}
+.merge-row button {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+}
+
+.split-row input[type="number"] {
+    flex: 0 0 90px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #5a5c66;
+    background: #3a3c44;
+    color: #fff;
+    font-size: 14px;
+}
+.split-row input[type="number"]:focus {
+    outline: none;
+    border-color: #1981CA;
+}
+.split-row button {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid #1981CA;
+    background: transparent;
+    color: #d9dce1;
+    cursor: pointer;
+    transition: background .2s, color .2s;
+}
+.split-row button:hover {
+    background: #1981CA;
+    color: #fff;
+}
+
+/* ---------- 自定义提示框（toast） ---------- */
+.app-toast {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-16px);
+    background: #2b2d33;
+    color: #ffffff;
+    padding: 11px 20px;
+    border-radius: 8px;
+    border: 1px solid #5a5c66;
+    font-size: 0.9rem;
+    z-index: 99999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+    max-width: 82vw;
+    white-space: pre-wrap;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.6;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+}
+.app-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.app-toast.success {
+    border-color: #67c23a;
+    color: #c9f2d2;
+}
+.app-toast.error {
+    border-color: #f56c6c;
+    color: #ffd4d4;
+}
+.app-toast.warning {
+    border-color: #e6a23c;
+    color: #ffe8bf;
+}
+
+/* ---------- 自定义对话框（confirm / prompt） ---------- */
+.app-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99998;
+}
+.app-dialog {
+    background: #2b2d33;
+    border: 1px solid #5a5c66;
+    border-radius: 10px;
+    padding: 22px;
+    min-width: 300px;
+    max-width: 82vw;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+}
+.app-dialog-title {
+    font-size: 1.05rem;
+    font-weight: bold;
+    color: #ffffff;
+    margin-bottom: 14px;
+}
+.app-dialog-msg {
+    font-size: 0.9rem;
+    color: #d8d9dd;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 18px;
+    line-height: 1.7;
+}
+.app-dialog input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: 1px solid #5a5c66;
+    background: #3a3c44;
+    color: #ffffff;
+    font-size: 14px;
+    margin-bottom: 18px;
+    outline: none;
+}
+.app-dialog input:focus {
+    border-color: #1981CA;
+}
+.app-dialog-btns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.app-dialog-btn {
+    padding: 7px 20px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: filter .15s;
+}
+.app-dialog-btn.cancel {
+    background: #464850;
+    color: #d8d9dd;
+}
+.app-dialog-btn.ok {
+    background: #1981CA;
+    color: #ffffff;
+}
+.app-dialog-btn:hover {
+    filter: brightness(1.15);
 }
