@@ -127,30 +127,80 @@ function openDictDB() {
 async function loadDictToMemory() {
     if (window.dictLoaded || window.dictLoading) return;
     window.dictLoading = true;
+    showImportHint('正在打开词典数据库...');
     try {
         const db = await openDictDB();
-        const entries = await new Promise((resolve, reject) => {
-            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
-            const req = tx.objectStore(DICT_STORE_WORDS).getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = (e) => reject(e.target.error);
-        });
         const map = new Map();
-        for (const entry of entries) {
-            if (entry.word) {
-                map.set(entry.word.toLowerCase(), entry);
-            }
-        }
+        // 使用游标分批读取（每批 10000 条），实时更新加载进度，避免一次性读取卡死页面
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
+            const store = tx.objectStore(DICT_STORE_WORDS);
+            const countReq = store.count();
+            countReq.onsuccess = () => {
+                const total = countReq.result || 0;
+                if (total === 0) { resolve(); return; }
+                let done = 0;
+                let buffer = [];
+                const flush = () => {
+                    for (const entry of buffer) {
+                        if (entry.word) map.set(entry.word.toLowerCase(), entry);
+                    }
+                    buffer = [];
+                };
+                const req = store.openCursor();
+                req.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        buffer.push(cursor.value);
+                        done++;
+                        if (buffer.length >= 10000) {
+                            flush();
+                            const pct = Math.round(done / total * 100);
+                            showImportHint('正在加载词典 ' + pct + '%（' + done + '/' + total + '）');
+                        }
+                        // 同步继续游标，保持事务活跃（setTimeout 会让 readonly 事务失效导致停滞）
+                        cursor.continue();
+                    } else {
+                        flush();
+                        resolve();
+                    }
+                };
+                req.onerror = (e) => reject(e.target.error);
+            };
+            countReq.onerror = (e) => reject(e.target.error);
+        });
         if (map.size > 0) {
             window.dictData = map;
             window.dictLoaded = true;
         }
+        hideImportHint();
         window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: map.size } }));
     } catch (e) {
         console.warn('词典加载失败', e);
+        hideImportHint();
     } finally {
         window.dictLoading = false;
     }
+}
+
+// 从 IndexedDB 查询词条，兼容大小写：IndexedDB 主键是词条原文大小写，
+// 先按小写查，未命中再按原文查（如 CD 的 key 是 "CD"，输入 "cd" 也能查到）
+function idbGetDictEntry(store, word) {
+    const lower = word.toLowerCase();
+    return new Promise((resolve) => {
+        const req = store.get(lower);
+        req.onsuccess = () => {
+            if (req.result) { resolve(req.result); return; }
+            if (lower !== word) {
+                const req2 = store.get(word);
+                req2.onsuccess = () => resolve(req2.result || null);
+                req2.onerror = () => resolve(null);
+            } else {
+                resolve(null);
+            }
+        };
+        req.onerror = () => resolve(null);
+    });
 }
 
 // 查询单个单词（优先内存，否则 IndexedDB）
@@ -160,12 +210,8 @@ async function lookupWord(word) {
     }
     try {
         const db = await openDictDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
-            const req = tx.objectStore(DICT_STORE_WORDS).get(word.toLowerCase());
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = (e) => reject(e.target.error);
-        });
+        const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
+        return await idbGetDictEntry(tx.objectStore(DICT_STORE_WORDS), word);
     } catch (err) {
         return null;
     }
@@ -183,26 +229,16 @@ async function lookupWords(wordList) {
         });
         return result;
     }
-    // 否则从 IndexedDB 查
+    // 否则从 IndexedDB 查（大小写容错）
     try {
         const db = await openDictDB();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
-            const store = tx.objectStore(DICT_STORE_WORDS);
-            let pending = wordList.length;
-            wordList.forEach(w => {
-                const req = store.get(w.toLowerCase());
-                req.onsuccess = () => {
-                    if (req.result) result.set(w.toLowerCase(), req.result);
-                    pending--;
-                    if (pending === 0) resolve(result);
-                };
-                req.onerror = () => {
-                    pending--;
-                    if (pending === 0) resolve(result);
-                };
-            });
+        const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
+        const store = tx.objectStore(DICT_STORE_WORDS);
+        const entries = await Promise.all(wordList.map(w => idbGetDictEntry(store, w)));
+        wordList.forEach((w, i) => {
+            if (entries[i]) result.set(w.toLowerCase(), entries[i]);
         });
+        return result;
     } catch {
         return result;
     }
@@ -442,3 +478,76 @@ document.addEventListener('DOMContentLoaded', () => {
     updateMemUsage();
     setInterval(updateMemUsage, 5000);
 });
+
+
+// ================= 自定义 UI 提示组件（替代浏览器自带 alert/confirm/prompt） =================
+let _toastTimer = null;
+// 顶部浮动提示，type: info / success / error / warning
+function showToast(msg, type) {
+    let el = document.getElementById('appToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'appToast';
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = 'app-toast show ' + (type || '');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => {
+        el.className = 'app-toast';
+    }, 3200);
+}
+
+let _dialogCb = null;
+// 确认框：msg 为提示文字，onOk/onCancel 为回调
+function showConfirm(msg, onOk, onCancel) {
+    showDialog('提示', msg, null, onOk, onCancel);
+}
+// 输入框：title 标题、defaultValue 默认值，onOk(value) 回调
+function showPrompt(title, defaultValue, onOk, onCancel) {
+    showDialog(title, '', defaultValue, onOk, onCancel);
+}
+// 通用对话框
+function showDialog(title, msg, defaultValue, onOk, onCancel) {
+    const overlay = document.getElementById('appDialogOverlay');
+    if (!overlay) return;
+    document.getElementById('appDialogTitle').textContent = title || '提示';
+    const msgEl = document.getElementById('appDialogMsg');
+    const input = document.getElementById('appDialogInput');
+    if (defaultValue !== null && defaultValue !== undefined) {
+        msgEl.style.display = 'none';
+        input.style.display = '';
+        input.value = defaultValue;
+        input.select();
+        input.focus();
+    } else {
+        msgEl.style.display = '';
+        msgEl.textContent = msg || '';
+        input.style.display = 'none';
+        input.value = '';
+    }
+    _dialogCb = { onOk: onOk, onCancel: onCancel };
+    overlay.style.display = 'flex';
+    // 回车确认 / Esc 取消
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') dialogOk();
+        else if (e.key === 'Escape') dialogCancel();
+    };
+}
+function dialogOk() {
+    const cb = _dialogCb;
+    const input = document.getElementById('appDialogInput');
+    const val = input && input.style.display !== 'none' ? input.value : undefined;
+    closeDialog();
+    if (cb && cb.onOk) cb.onOk(val);
+}
+function dialogCancel() {
+    const cb = _dialogCb;
+    closeDialog();
+    if (cb && cb.onCancel) cb.onCancel();
+}
+function closeDialog() {
+    const overlay = document.getElementById('appDialogOverlay');
+    if (overlay) overlay.style.display = 'none';
+    _dialogCb = null;
+}

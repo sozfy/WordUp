@@ -124,7 +124,7 @@ function setDictStatus(text) {
 
 // ---------- 重新导入词典 ----------
 async function reimportDict() {
-    if (!confirm('重新导入将清空当前词典数据并重新下载（约需1-3分钟），是否继续？')) return;
+    showConfirm('重新导入将清空当前词典数据并重新下载（约需1-3分钟），是否继续？', async () => {
     const btn = document.getElementById('reimportBtn');
     const searchBtn = document.getElementById('searchBtn');
     if (btn) btn.disabled = true;
@@ -153,18 +153,19 @@ async function reimportDict() {
         }
     } catch (e) {
         console.error('重新导入失败', e);
-        alert('重新导入失败：' + e.message);
+        showToast('重新导入失败：' + e.message, 'error');
         setDictStatus('词典未加载');
     } finally {
         if (btn) btn.disabled = false;
     }
+    });
 }
 
 // ---------- 导入词典 ----------
 async function importDict() {
     const fileInput = document.getElementById('csvFile');
     if (!fileInput.files || fileInput.files.length === 0) {
-        alert('请先选择 ecdict.csv 文件');
+        showToast('请先选择 ecdict.csv 文件', 'error');
         return;
     }
 
@@ -185,7 +186,7 @@ async function importDict() {
 
         const rows = parseCSV(text);
         if (rows.length < 2) {
-            alert('CSV 文件格式不正确或为空');
+            showToast('CSV 文件格式不正确或为空', 'error');
             importBtn.disabled = false;
             return;
         }
@@ -254,7 +255,7 @@ async function importDict() {
 
     } catch (err) {
         console.error(err);
-        alert('导入失败：' + err.message);
+        showToast('导入失败：' + err.message, 'error');
         importBtn.disabled = false;
         progressDiv.classList.add('hidden');
     }
