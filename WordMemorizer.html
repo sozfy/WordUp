@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=30">
+    <link rel="stylesheet" href="css/style.css?v=34">
 </head>
 <body>
     <!--导航栏-->
@@ -84,6 +84,31 @@
                     <span>词意互换</span>
                     <input type="checkbox" class="onoff" id="swapBtn" onclick="applySwap()">
                 </div>
+                <div class="setting-row">
+                    <span>单轮循环</span>
+                    <input type="checkbox" class="onoff" id="roundBtn" onclick="applyRound()">
+                </div>
+                <div class="setting-row">
+                    <span>开启拼写</span>
+                    <input type="checkbox" class="onoff" id="spellBtn" onclick="applySpell()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 单轮循环结束弹窗 -->
+    <div class="modal-overlay" id="roundModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>单轮循环结束</span>
+                <button class="modal-close" onclick="roundFinishClose()"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <div id="roundSummary" style="margin-bottom:14px; color:#c0c4cc; font-size:0.95rem;"></div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button id="roundDelKnownBtn" onclick="roundDeleteKnown()">删除已认识的单词</button>
+                    <button id="roundNewUnknownBtn" onclick="roundCreateUnknownList()">以不认识的单词新建列表</button>
+                </div>
             </div>
         </div>
     </div>
@@ -138,7 +163,7 @@
                 <div class="word-count" id="wordCount">单词总数：0</div>
                 <div class="split-row">
                     <input type="number" id="splitCount" min="1" step="1" placeholder="数量" title="输入要拆分的单词个数">
-                    <button id="splitBtn" onclick="splitWords()">拆分X个词</button>
+                    <button id="splitBtn" onclick="splitWords()">拆分</button>
                 </div>
                 <div class="merge-row">
                     <select id="mergeSelect" title="选择要合并的词表（合并后该词表会被删除）"></select>
@@ -165,6 +190,8 @@
                     <div class="meaning hidden" id="currentMeaning"></div>
                 </div>
 
+                <input type="text" id="spellInput" class="spell-input hidden" placeholder="输入单词拼写" autocomplete="off" spellcheck="false">
+
                 <div id="optionDiv">
                     <button class="options" id="optionButton1" onclick="isOptionCorrect(1)">选项1</button>
                     <button class="options" id="optionButton2" onclick="isOptionCorrect(2)">选项2</button>
@@ -189,7 +216,7 @@
 
     <script src="js/common.js?v=2"></script>
     <script src="data/preset_data.js?v=2"></script>
-    <script src="js/script.js?v=3"></script>
+    <script src="js/script.js?v=5"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
