@@ -362,7 +362,7 @@ h1 {
 
     position: fixed;
 
-    top: 52px;
+    top: 60px;
 
     left: 12px;
 
@@ -2354,4 +2354,59 @@ input[type="file"] {
 }
 .app-dialog-btn:hover {
     filter: brightness(1.15);
+}
+
+
+/* ---- 拼写输入框（显示区下方，居中输入，不做检测） ---- */
+.spell-input {
+    width: 100%;
+    text-align: center;
+    font-size: 1.15rem;
+    padding: 10px 12px;
+    margin: 0.75rem 0 0;
+    box-sizing: border-box;
+    border: 1px solid #5a5c66;
+    border-radius: 6px;
+    background-color: #464850;
+    color: #ffffff;
+    outline: none;
+}
+.spell-input:focus {
+    border-color: #1981CA;
+}
+
+/* ---- 拆分/合并：输入框与选择框高度宽度一致，按钮高度一致，上下居中 ---- */
+.split-row,
+.merge-row {
+    align-items: center;
+}
+#splitCount,
+#mergeSelect {
+    width: 170px;
+    flex: 0 0 170px;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    font-size: 14px;
+    vertical-align: middle;
+}
+#splitBtn,
+#mergeBtn {
+    width: auto;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 6px 16px;
+    font-size: 14px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-top: 2px;
+    line-height: 1;
+}
+
+/* ---- 打开单词列表按钮：轻微下移 ---- */
+.list-action-btn {
+    margin-top: 3px;
 }
