@@ -2,9 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#3a3c44">
     <title>词典查询</title>
-    <link rel="stylesheet" href="css/style.css?v=34">
+    <link rel="stylesheet" href="css/style.css?v=46">
 </head>
 <body>
     <!--导航栏-->
@@ -29,7 +30,7 @@
                 <h3>单词查询</h3>
                 <div class="dict-toolbar">
                     <div class="remain-count" id="dictStatus">词典未加载</div>
-                    <span class="dict-total">应载 <b id="dictExpectedCount">770,611</b> 词</span>
+                    <span id="dictExpectedCount" style="display:none;">770,611</span>
                     <button id="reimportBtn" onclick="reimportDict()">重新导入</button>
                 </div>
                 <div class="search-box">
@@ -49,8 +50,8 @@
         </div>
     </main>
 
-    <script src="js/common.js?v=2"></script>
-    <script src="js/dict.js?v=2"></script>
+    <script src="js/common.js?v=5"></script>
+    <script src="js/dict.js?v=4"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
