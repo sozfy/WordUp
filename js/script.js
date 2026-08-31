@@ -359,20 +359,20 @@ function updateRemainCount() {
 function showOption() {
     const optionDiv = document.getElementById('optionDiv');
     const list = getActiveList();
-    const switchOn = document.getElementById('switchBtn').checked;
+    // 互斥：开启选择题时自动关闭拼写
+    const switchBtn = document.getElementById('switchBtn');
+    const spellBtn = document.getElementById('spellBtn');
+    if (switchBtn && spellBtn && switchBtn.checked && spellBtn.checked) {
+        spellBtn.checked = false;
+        try { localStorage.setItem('spellMode', '0'); } catch (e) {}
+        updateSpellInput();
+    }
+    const switchOn = !!(switchBtn && switchBtn.checked);
     const enoughWords = list.words && list.words.length >= 4;
     if (switchOn && enoughWords) {
         optionDiv.classList.remove('hidden');
-        // 选择题模式下，若有当前词且尚未选选项，显示意思需等选完选项
-        if (list.selectedWord) {
-            document.getElementById('showButton').disabled = true;
-        }
     } else {
         optionDiv.classList.add('hidden');
-        // 非选择题模式，有当前词即可显示意思
-        if (list.selectedWord) {
-            document.getElementById('showButton').disabled = false;
-        }
     }
 }
 
@@ -384,7 +384,7 @@ function updateDraw() {
 
     const list = getActiveList();
     document.getElementById('startButton').disabled = true;
-    document.getElementById('showButton').disabled = true;
+    // showButton 常开，不设置 disabled
     document.getElementById('checkButton1').disabled = true;
     document.getElementById('checkButton2').disabled = true;
 
@@ -393,9 +393,6 @@ function updateDraw() {
         document.getElementById('currentWord').textContent = swap ? normalizeNewlines(list.selectedWord.meaning) : list.selectedWord.word;
         document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : normalizeNewlines(list.selectedWord.meaning);
         document.getElementById('currentMeaning').classList.add('hidden');
-        // 选择题模式下需先选选项才能显示意思；非选择题模式直接可显示
-        const optionsOn = document.getElementById('switchBtn').checked && list.words && list.words.length >= 4;
-        document.getElementById('showButton').disabled = optionsOn;
     } else {
         document.getElementById('startButton').disabled = false;
     }
@@ -489,30 +486,61 @@ function isOptionCorrect(num) {
         document.getElementById(btnId).style.backgroundColor = '#f56c6c';
     }
 
-    // 激活"显示意思"按钮
-    document.getElementById('showButton').disabled = false;
 }
 
 // ---------- 核心抽取逻辑 ----------
 function drawWord(num) {
     const data = getWordData();
     const list = getActiveList(data);
+    const roundBtn = document.getElementById('roundBtn');
+    const roundOn = !!(roundBtn && roundBtn.checked);
 
-    if (list.pendingWords.length !== 0 && list.selectedWord) {
+    // ---- 记录当前选中词的判定 ----
+    if (list.selectedWord) {
+        if (roundOn) {
+            // 单轮循环：认识/不认识均不放回，仅记录判定
+            list.roundKnown = list.roundKnown || [];
+            list.roundUnknown = list.roundUnknown || [];
+            const w = list.selectedWord.word;
+            if (num === 0) {
+                if (!list.roundUnknown.includes(w)) list.roundUnknown.push(w);
+            } else {
+                if (!list.roundKnown.includes(w)) list.roundKnown.push(w);
+            }
+        } else if (num === 0) {
+            // 普通模式：不认识放回待抽取
+            list.pendingWords.push(list.selectedWord);
+        }
         document.getElementById('lastWord').textContent =
             list.selectedWord.word + ' — ' + list.selectedWord.meaning;
     }
 
-    if (list.pendingWords.length === 0 && list.selectedWord && num === 0) {
-        list.pendingWords.push(list.selectedWord);
+    // ---- 单轮循环：本轮已抽完 ----
+    if (roundOn && list.pendingWords.length === 0) {
         list.selectedWord = null;
+        saveWordData(data);
+        const hasResult = (list.roundKnown || []).length + (list.roundUnknown || []).length > 0;
+        if (hasResult) {
+            finishRound();
+        } else {
+            showToast('待抽取为空，请重置抽取或添加新单词', 'warning');
+            document.getElementById('currentWord').textContent = "待抽取为空";
+            document.getElementById('currentMeaning').textContent = "";
+            document.getElementById('currentMeaning').classList.add('hidden');
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('checkButton1').disabled = true;
+            document.getElementById('checkButton2').disabled = true;
+        }
+        return;
     }
 
+    // ---- 普通模式：待抽取为空 ----
     if (list.pendingWords.length === 0) {
         list.selectedWord = null;
         showToast('待抽取为空，请重置抽取或添加新单词', 'warning');
         document.getElementById('currentWord').textContent = "待抽取为空";
         document.getElementById('currentMeaning').textContent = "";
+        document.getElementById('currentMeaning').classList.add('hidden');
         document.getElementById('startButton').disabled = false;
         document.getElementById('checkButton1').disabled = true;
         document.getElementById('checkButton2').disabled = true;
@@ -520,10 +548,8 @@ function drawWord(num) {
         return;
     }
 
+    // ---- 抽新词 ----
     const randomIndex = Math.floor(Math.random() * list.pendingWords.length);
-    if (num === 0 && list.selectedWord) {
-        list.pendingWords.push(list.selectedWord);
-    }
     list.selectedWord = list.pendingWords.splice(randomIndex, 1)[0];
     saveWordData(data);
 
@@ -532,9 +558,7 @@ function drawWord(num) {
     document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : normalizeNewlines(list.selectedWord.meaning);
     document.getElementById('currentMeaning').classList.add('hidden');
 
-    // 选择题模式：需先选选项才能显示意思；非选择题模式：直接可显示意思
-    const optionsOn = document.getElementById('switchBtn').checked && list.words && list.words.length >= 4;
-    document.getElementById('showButton').disabled = optionsOn;
+    // 显示意思按钮常开；认识/不认识需先点一次显示意思
     document.getElementById('checkButton1').disabled = true;
     document.getElementById('checkButton2').disabled = true;
 
@@ -554,10 +578,18 @@ function startDraw() {
 }
 
 function toggleMeaning() {
-    document.getElementById('currentMeaning').classList.remove('hidden');
-    document.getElementById('showButton').disabled = true;
-    document.getElementById('checkButton1').disabled = false;
-    document.getElementById('checkButton2').disabled = false;
+    const list = getActiveList();
+    if (!list || !list.selectedWord) return;
+    const meaningEl = document.getElementById('currentMeaning');
+    const wasHidden = meaningEl.classList.contains('hidden');
+    if (wasHidden) {
+        meaningEl.classList.remove('hidden');
+        // 首次显示时激活认识/不认识
+        document.getElementById('checkButton1').disabled = false;
+        document.getElementById('checkButton2').disabled = false;
+    } else {
+        meaningEl.classList.add('hidden');
+    }
 }
 
 // ---------- 批量添加单词（纯英文输入，自动查单词） ----------
@@ -708,6 +740,132 @@ function applySwap() {
     showOption();
 }
 
+// ---------- 单轮循环 ----------
+function applyRound() {
+    const roundBtn = document.getElementById('roundBtn');
+    if (!roundBtn) return;
+    const on = roundBtn.checked;
+    try { localStorage.setItem('roundMode', on ? '1' : '0'); } catch (e) {}
+    // 切换时清空本轮判定记录
+    const list = getActiveList();
+    if (list) {
+        list.roundKnown = [];
+        list.roundUnknown = [];
+        saveWordData(getWordData());
+        applyResetDraw();
+    }
+    showToast(on ? '已开启单轮循环（不放回抽词）' : '已关闭单轮循环', 'success');
+}
+
+function finishRound() {
+    const list = getActiveList();
+    const known = (list.roundKnown || []).length;
+    const unknown = (list.roundUnknown || []).length;
+    const summary = document.getElementById('roundSummary');
+    if (summary) summary.textContent = '本轮认识 ' + known + ' 个，不认识 ' + unknown + ' 个';
+    openModal('roundModal');
+    document.getElementById('currentWord').textContent = '本轮抽完，请处理结果';
+    document.getElementById('currentMeaning').textContent = '';
+    document.getElementById('currentMeaning').classList.add('hidden');
+    document.getElementById('startButton').disabled = true;
+    document.getElementById('checkButton1').disabled = true;
+    document.getElementById('checkButton2').disabled = true;
+}
+
+function roundDeleteKnown() {
+    const data = getWordData();
+    const list = getActiveList(data);
+    const known = list.roundKnown || [];
+    if (known.length === 0) { showToast('本轮没有认识的单词', 'warning'); return; }
+    const delSet = new Set(known.map(w => w.toLowerCase()));
+    list.words = list.words.filter(w => !delSet.has(w.word.toLowerCase()));
+    list.pendingWords = [...list.words];
+    list.selectedWord = null;
+    list.roundKnown = [];
+    list.roundUnknown = [];
+    saveWordData(data);
+    closeModal('roundModal');
+    renderSidebarLists();
+    applyResetDraw();
+    showToast('已删除 ' + known.length + ' 个认识的单词', 'success');
+}
+
+async function roundCreateUnknownList() {
+    const data = getWordData();
+    const list = getActiveList(data);
+    const unknownWords = list.roundUnknown || [];
+    if (unknownWords.length === 0) { showToast('本轮没有不认识的单词', 'warning'); return; }
+    // 查词典补释义
+    let result = new Map();
+    try { result = await lookupWords(unknownWords); } catch (e) {}
+    const newWords = unknownWords.map(w => {
+        const e = result.get(w.toLowerCase());
+        return {
+            word: e ? e.word : w,
+            meaning: e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)',
+            mnemonic: null
+        };
+    });
+    // 新词表名称（避免重名）
+    let baseName = list.name + '-不认识';
+    let name = baseName;
+    let seq = 2;
+    while (data.lists.some(l => l.name === name)) { name = baseName + seq; seq++; }
+    const newList = {
+        id: genListId(),
+        name: name,
+        words: newWords,
+        pendingWords: newWords.slice(),
+        selectedWord: null
+    };
+    data.lists.push(newList);
+    list.pendingWords = [...list.words];
+    list.selectedWord = null;
+    list.roundKnown = [];
+    list.roundUnknown = [];
+    saveWordData(data);
+    closeModal('roundModal');
+    renderSidebarLists();
+    applyResetDraw();
+    showToast('已用 ' + newWords.length + ' 个不认识的单词新建列表"' + name + '"', 'success');
+}
+
+function roundFinishClose() {
+    const data = getWordData();
+    const list = getActiveList(data);
+    list.pendingWords = [...list.words];
+    list.selectedWord = null;
+    list.roundKnown = [];
+    list.roundUnknown = [];
+    saveWordData(data);
+    closeModal('roundModal');
+    applyResetDraw();
+    showToast('已结束本轮，未做处理', 'info');
+}
+
+// ---------- 开启拼写 ----------
+function updateSpellInput() {
+    const spellBtn = document.getElementById('spellBtn');
+    const spellInput = document.getElementById('spellInput');
+    if (!spellBtn || !spellInput) return;
+    spellInput.classList.toggle('hidden', !spellBtn.checked);
+}
+
+function applySpell() {
+    const spellBtn = document.getElementById('spellBtn');
+    const switchBtn = document.getElementById('switchBtn');
+    if (!spellBtn || !switchBtn) return;
+    const on = spellBtn.checked;
+    // 与选择题互斥：开启拼写时自动关闭选项
+    if (on && switchBtn.checked) {
+        switchBtn.checked = false;
+        try { localStorage.setItem('optionMode', '0'); } catch (e) {}
+    }
+    try { localStorage.setItem('spellMode', on ? '1' : '0'); } catch (e) {}
+    updateSpellInput();
+    showOption();
+}
+
 // ---------- 拆分词表（随机抽取 X 个词组成新词表，并从原词表删除） ----------
 function splitWords() {
     const data = getWordData();
@@ -788,9 +946,13 @@ function applyResetDraw() {
     showOption();
 
     document.getElementById('startButton').disabled = false;
-    document.getElementById('showButton').disabled = true;
+    // showButton 常开
     document.getElementById('checkButton1').disabled = true;
     document.getElementById('checkButton2').disabled = true;
+
+    // 清空单轮循环判定记录
+    list.roundKnown = [];
+    list.roundUnknown = [];
 
     refreshCurrentList();
     updateRemainCount();
@@ -821,7 +983,7 @@ function clearAllWords() {
         document.getElementById('wordListDisplay').innerHTML = '<div class="word-item">暂无单词</div>';
         document.getElementById('wordCount').textContent = '所有单词个数：0';
         document.getElementById('startButton').disabled = false;
-        document.getElementById('showButton').disabled = true;
+        // showButton 常开
         document.getElementById('checkButton1').disabled = true;
         document.getElementById('checkButton2').disabled = true;
         renderSidebarLists();
@@ -839,20 +1001,32 @@ function clearAllWords() {
     refreshCurrentList();
     updateDraw();
 
+    // 恢复"选择题模式"设置
+    const switchBtn = document.getElementById('switchBtn');
+    if (switchBtn) {
+        try { switchBtn.checked = localStorage.getItem('optionMode') !== '0'; } catch (e) {}
+    }
     // 恢复"词意互换"设置并应用
     const swapBtn = document.getElementById('swapBtn');
     if (swapBtn) {
         try { swapBtn.checked = localStorage.getItem('swapMeaning') === '1'; } catch (e) {}
         applySwap();
     }
-    // 拆分数量输入：实时更新按钮文字
-    const splitCount = document.getElementById('splitCount');
-    const splitBtn = document.getElementById('splitBtn');
-    if (splitCount && splitBtn) {
-        splitCount.addEventListener('input', () => {
-            const v = parseInt(splitCount.value, 10);
-            splitBtn.textContent = (v > 0) ? ('拆分 ' + v + ' 个词') : '拆分X个词';
-        });
+    // 恢复"单轮循环"设置
+    const roundBtn = document.getElementById('roundBtn');
+    if (roundBtn) {
+        try { roundBtn.checked = localStorage.getItem('roundMode') === '1'; } catch (e) {}
+    }
+    // 恢复"开启拼写"设置
+    const spellBtn = document.getElementById('spellBtn');
+    if (spellBtn) {
+        try { spellBtn.checked = localStorage.getItem('spellMode') === '1'; } catch (e) {}
+        updateSpellInput();
+    }
+    // 互斥兜底：拼写与选项不同时开启
+    if (switchBtn && spellBtn && spellBtn.checked && switchBtn.checked) {
+        switchBtn.checked = false;
+        try { localStorage.setItem('optionMode', '0'); } catch (e) {}
     }
 
     // 绑定底部按钮事件
