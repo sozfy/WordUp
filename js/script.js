@@ -50,28 +50,95 @@ function closeModal(id) {
 }
 
 // ---------- 工具函数 ----------
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
+// escapeHtml / showToast / showConfirm / showPrompt 等由 common.js 提供
 function genListId() {
     return 'list_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
 }
 
 // ---------- 存储相关函数 ----------
-// 内存缓存：包含完整单词对象（含 meaning），保存到 localStorage 时剥离 meaning
+// 内存缓存：包含完整单词对象（含 meaning），保存到 IndexedDB 时剥离 meaning
 let _wordDataCache = null;
-let _meaningsLoaded = false;
 
-function initStorage() {
-    const raw = localStorage.getItem('wordData');
-    if (!raw) {
+// ---------- IndexedDB 单词数据存储（词表/单词持久化） ----------
+const WORD_DB_NAME = 'WordMemorizerData';
+const WORD_DB_STORE = 'wordData';
+const WORD_DB_VERSION = 1;
+const WORD_DB_KEY = 'main';
+
+function openWordDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(WORD_DB_NAME, WORD_DB_VERSION);
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(WORD_DB_STORE)) {
+                db.createObjectStore(WORD_DB_STORE); // 无 keyPath，用 put(value, key)
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+// 读取单词数据；首次运行时自动从旧版 localStorage 迁移
+async function loadWordData() {
+    try {
+        const db = await openWordDB();
+        const stored = await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readonly');
+            const req = tx.objectStore(WORD_DB_STORE).get(WORD_DB_KEY);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+        if (stored) return stored;
+
+        // 无 IndexedDB 数据：尝试从旧版 localStorage 迁移 wordData
+        try {
+            const raw = localStorage.getItem('wordData');
+            if (raw) {
+                let legacy = JSON.parse(raw);
+                // 数据迁移：旧格式 { allWords, pendingWords, selectedWord }
+                if (legacy.allWords !== undefined && !legacy.lists) {
+                    const migratedList = {
+                        id: genListId(),
+                        name: '我的单词',
+                        words: legacy.allWords || [],
+                        pendingWords: legacy.pendingWords || [],
+                        selectedWord: legacy.selectedWord || null
+                    };
+                    legacy = { activeListId: migratedList.id, lists: [migratedList] };
+                }
+                const ok = await writeWordData(legacy);
+                if (ok) {
+                    try { localStorage.removeItem('wordData'); } catch (e) {} // 迁移成功后再清除旧数据
+                }
+                return legacy;
+            }
+        } catch (e) { /* localStorage 数据损坏则忽略 */ }
+
+        return null; // 无历史数据
+    } catch (e) {
+        return null;
+    }
+}
+
+// 写入 IndexedDB（传入的 data 已剥离 meaning）
+async function writeWordData(data) {
+    try {
+        const db = await openWordDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readwrite');
+            const req = tx.objectStore(WORD_DB_STORE).put(data, WORD_DB_KEY);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        });
+    } catch (e) {
+        return false;
+    }
+}
+
+async function initStorage() {
+    _wordDataCache = await loadWordData();
+    if (!_wordDataCache) {
         const defaultList = {
             id: genListId(),
             name: '默认词表',
@@ -81,22 +148,8 @@ function initStorage() {
         };
         _wordDataCache = { activeListId: defaultList.id, lists: [defaultList] };
         saveWordData(_wordDataCache);
-    } else {
-        _wordDataCache = JSON.parse(raw);
-        // 数据迁移：旧格式 { allWords, pendingWords, selectedWord }
-        if (_wordDataCache.allWords !== undefined && !_wordDataCache.lists) {
-            const migratedList = {
-                id: genListId(),
-                name: '我的单词',
-                words: _wordDataCache.allWords || [],
-                pendingWords: _wordDataCache.pendingWords || [],
-                selectedWord: _wordDataCache.selectedWord || null
-            };
-            _wordDataCache = { activeListId: migratedList.id, lists: [migratedList] };
-            saveWordData(_wordDataCache);
-        }
     }
-    // 异步从词典加载释义（localStorage 中不存 meaning）
+    // 异步从词典加载释义（IndexedDB 中不存 meaning）
     loadAllMeanings();
 }
 
@@ -109,10 +162,7 @@ async function loadAllMeanings() {
         (list.pendingWords || []).forEach(w => allWords.add(w.word));
         if (list.selectedWord) allWords.add(list.selectedWord.word);
     });
-    if (allWords.size === 0) {
-        _meaningsLoaded = true;
-        return;
-    }
+    if (allWords.size === 0) return;
     const entries = await lookupWords(Array.from(allWords));
     _wordDataCache.lists.forEach(list => {
         (list.words || []).forEach(w => {
@@ -140,7 +190,6 @@ async function loadAllMeanings() {
             }
         }
     });
-    _meaningsLoaded = true;
     // 释义加载完成后刷新 UI
     renderSidebarLists();
     refreshCurrentList();
@@ -160,7 +209,7 @@ function saveWordData(data) {
         (list.pendingWords || []).forEach(w => { delete w.meaning; });
         if (list.selectedWord) { delete list.selectedWord.meaning; }
     });
-    localStorage.setItem('wordData', JSON.stringify(stripped));
+    writeWordData(stripped); // 写入 IndexedDB
 }
 
 function getActiveList(data) {
@@ -226,14 +275,22 @@ function renameList(id) {
 
 function deleteList(id) {
     const data = getWordData();
-    if (data.lists.length <= 1) {
-        showToast('至少保留一个词表', 'error');
-        return;
-    }
     const list = data.lists.find(l => l.id === id);
     if (!list) return;
-    showConfirm('确定删除词表"' + list.name + '"吗？该词表下的所有单词将被删除，无法恢复！', () => {
+    const isLast = data.lists.length <= 1;
+    const tip = isLast ? '这是最后一个词表，删除后将自动创建一个空的默认词表。' : '';
+    showConfirm('确定删除词表"' + list.name + '"吗？该词表下的所有单词将被删除，无法恢复！' + tip, () => {
         data.lists = data.lists.filter(l => l.id !== id);
+        if (data.lists.length === 0) {
+            // 删除最后一个列表后，自动生成一个空的默认列表
+            data.lists.push({
+                id: genListId(),
+                name: '默认列表',
+                words: [],
+                pendingWords: [],
+                selectedWord: null
+            });
+        }
         if (data.activeListId === id) {
             data.activeListId = data.lists[0].id;
         }
@@ -376,6 +433,9 @@ function showOption() {
     }
 }
 
+// 记录当前显示的词表 id，用于在切换词表时清空"上一个单词"等瞬时信息
+let _lastActiveListId = null;
+
 function updateDraw() {
     updateActiveListName();
     updateRemainCount();
@@ -395,11 +455,25 @@ function updateDraw() {
         document.getElementById('currentMeaning').classList.add('hidden');
     } else {
         document.getElementById('startButton').disabled = false;
+        // 词表尚未开始抽取：清空主显示区，避免残留上一词表的单词/释义
+        document.getElementById('currentWord').textContent = '点击开始抽取单词';
+        document.getElementById('currentMeaning').textContent = '';
+        document.getElementById('currentMeaning').classList.add('hidden');
+    }
+    // 切换词表时更新"上一个单词"为该词表自己的判定词（无则显示占位），并清空拼写输入
+    if (_lastActiveListId !== list.id) {
+        _lastActiveListId = list.id;
+        document.getElementById('lastWord').textContent = list.lastJudged || '上一个单词';
+        const spellInputEl = document.getElementById('spellInput');
+        if (spellInputEl) {
+            spellInputEl.value = '';
+            spellInputEl.style.color = '';
+        }
     }
 }
 
 // ---------- 单词列表渲染 ----------
-function renderWordList(title, wordArray) {
+function renderWordList(wordArray) {
     const displayEl = document.getElementById('wordListDisplay');
     const countEl = document.getElementById('wordCount');
 
@@ -422,25 +496,47 @@ function renderWordList(title, wordArray) {
 
 function refreshCurrentList() {
     const list = getActiveList();
-    renderWordList("", list.words);
+    renderWordList(list.words);
 }
 
 // ---------- 选项相关逻辑 ----------
 let optionsText = [];
 
+function disableOptionButtons() {
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById("optionButton" + i).disabled = true;
+    }
+}
+
+// 将选项按钮恢复为占位文本（切换词表/未开始抽取时清空残留选项）
+function resetOptionText() {
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById("optionButton" + i).textContent = '选项' + i;
+    }
+}
+
 function createOptions() {
     for (let i = 1; i <= 4; i++) {
         const btn = document.getElementById("optionButton" + i);
         btn.style.backgroundColor = '';
+        btn.style.whiteSpace = '';
+        btn.style.wordBreak = '';
         btn.disabled = false;
     }
 
     const list = getActiveList();
     if (!list.words || list.words.length < 4) {
         document.getElementById('optionDiv').classList.add('hidden');
+        resetOptionText();
+        disableOptionButtons();
         return;
     }
-    if (!list.selectedWord) return;
+    // 未抽取单词时禁用选项按钮并清空残留文本，避免切换词表后串词
+    if (!list.selectedWord) {
+        resetOptionText();
+        disableOptionButtons();
+        return;
+    }
 
     if (document.getElementById('switchBtn').checked) {
         document.getElementById('optionDiv').classList.remove('hidden');
@@ -473,23 +569,36 @@ function isOptionCorrect(num) {
     for (let i = 1; i <= 4; i++) {
         const btn = document.getElementById("optionButton" + i);
         btn.style.backgroundColor = '';
+        btn.style.whiteSpace = '';
+        btn.style.wordBreak = '';
         btn.innerText = isSwapOn() ? optionsText[i - 1].word : flattenNewlines(optionsText[i - 1].meaning);
     }
 
     // 标记当前选中项
     const btnId = "optionButton" + num;
+    const markedBtn = document.getElementById(btnId);
     if (selectedOption.word === list.selectedWord.word) {
-        document.getElementById(btnId).innerText = '√ ' + selectedOption.word + '-' + flattenNewlines(selectedOption.meaning);
-        document.getElementById(btnId).style.backgroundColor = '#67c23a';
+        markedBtn.innerText = '√ ' + selectedOption.word + '-' + flattenNewlines(selectedOption.meaning);
+        markedBtn.style.backgroundColor = '#67c23a';
     } else {
-        document.getElementById(btnId).innerText = '× ' + selectedOption.word + '-' + flattenNewlines(selectedOption.meaning);
-        document.getElementById(btnId).style.backgroundColor = '#f56c6c';
+        markedBtn.innerText = '× ' + selectedOption.word + '-' + flattenNewlines(selectedOption.meaning);
+        markedBtn.style.backgroundColor = '#f56c6c';
     }
+    // 作答后允许换行显示完整内容，避免窄屏截断释义
+    markedBtn.style.whiteSpace = 'normal';
+    markedBtn.style.wordBreak = 'break-word';
 
 }
 
 // ---------- 核心抽取逻辑 ----------
 function drawWord(num) {
+    // 判定后清空拼写输入框并复原颜色
+    const spellInputEl = document.getElementById('spellInput');
+    if (spellInputEl) {
+        spellInputEl.value = '';
+        spellInputEl.style.color = '';
+    }
+
     const data = getWordData();
     const list = getActiveList(data);
     const roundBtn = document.getElementById('roundBtn');
@@ -511,8 +620,9 @@ function drawWord(num) {
             // 普通模式：不认识放回待抽取
             list.pendingWords.push(list.selectedWord);
         }
-        document.getElementById('lastWord').textContent =
-            list.selectedWord.word + ' — ' + list.selectedWord.meaning;
+        // 记住本词表的上一个判定词，切换词表后仍可显示各自的上一个单词
+        list.lastJudged = list.selectedWord.word + ' — ' + list.selectedWord.meaning;
+        document.getElementById('lastWord').textContent = list.lastJudged;
     }
 
     // ---- 单轮循环：本轮已抽完 ----
@@ -587,6 +697,14 @@ function toggleMeaning() {
         // 首次显示时激活认识/不认识
         document.getElementById('checkButton1').disabled = false;
         document.getElementById('checkButton2').disabled = false;
+        // 词意互换 + 拼写同时开启：点击显示单词时比对拼写输入框并着色
+        const spellInputEl = document.getElementById('spellInput');
+        const spellBtn = document.getElementById('spellBtn');
+        if (spellInputEl && isSwapOn() && spellBtn && spellBtn.checked) {
+            const typed = (spellInputEl.value || '').trim().toLowerCase();
+            const target = String(list.selectedWord.word || '').toLowerCase();
+            spellInputEl.style.color = (typed === target) ? '#67c23a' : '#f56c6c';
+        }
     } else {
         meaningEl.classList.add('hidden');
     }
@@ -933,6 +1051,7 @@ function applyResetDraw() {
 
     document.getElementById('currentWord').textContent = '已重置，请开始抽取';
     document.getElementById('currentMeaning').classList.add('hidden');
+    list.lastJudged = null;
     document.getElementById('lastWord').textContent = '上一个单词';
 
     // 清空选项
@@ -940,6 +1059,8 @@ function applyResetDraw() {
         const btn = document.getElementById('optionButton' + i);
         btn.textContent = '选项' + i;
         btn.style.backgroundColor = '';
+        btn.style.whiteSpace = '';
+        btn.style.wordBreak = '';
         btn.disabled = true;
     }
     // 按选择题开关状态决定选项区显隐（修复：开启选项时重置后不应隐藏）
@@ -979,9 +1100,10 @@ function clearAllWords() {
 
         document.getElementById('currentWord').textContent = '请添加单词';
         document.getElementById('currentMeaning').classList.add('hidden');
+        list.lastJudged = null;
         document.getElementById('lastWord').textContent = '上一个单词';
         document.getElementById('wordListDisplay').innerHTML = '<div class="word-item">暂无单词</div>';
-        document.getElementById('wordCount').textContent = '所有单词个数：0';
+        document.getElementById('wordCount').textContent = '单词总数：0';
         document.getElementById('startButton').disabled = false;
         // showButton 常开
         document.getElementById('checkButton1').disabled = true;
@@ -993,10 +1115,10 @@ function clearAllWords() {
 }
 
 // ---------- 页面初始化（脚本在body末尾，DOM已就绪） ----------
-(function init() {
+(async function init() {
     if (!document.getElementById('remainCount')) return;
 
-    initStorage();
+    await initStorage();
     renderSidebarLists();
     refreshCurrentList();
     updateDraw();
@@ -1027,6 +1149,13 @@ function clearAllWords() {
     if (switchBtn && spellBtn && spellBtn.checked && switchBtn.checked) {
         switchBtn.checked = false;
         try { localStorage.setItem('optionMode', '0'); } catch (e) {}
+    }
+    // 选择题开关：用户切换时持久化 optionMode（修复：此前只写 '0' 不写 '1'，
+    // 导致曾被互斥置为 '0' 后，重新开启选项刷新即被恢复为关闭）
+    if (switchBtn) {
+        switchBtn.addEventListener('change', () => {
+            try { localStorage.setItem('optionMode', switchBtn.checked ? '1' : '0'); } catch (e) {}
+        });
     }
 
     // 绑定底部按钮事件
@@ -1071,3 +1200,62 @@ function clearAllWords() {
         });
     }
 })();
+
+// ---------- 浮动菜单按钮可拖动（点击仍开菜单，拖动移动位置并记忆） ----------
+(function initDraggableMenuBtn() {
+    const btn = document.getElementById('floatingMenuBtn');
+    if (!btn) return;
+
+    // 恢复上次保存的位置（限制在视口内，顶部不低于导航栏）
+    try {
+        const pos = JSON.parse(localStorage.getItem('floatingMenuPos') || 'null');
+        if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            const maxX = Math.max(0, window.innerWidth - btn.offsetWidth);
+            const maxY = Math.max(0, window.innerHeight - btn.offsetHeight);
+            btn.style.left = Math.min(Math.max(pos.x, 0), maxX) + 'px';
+            btn.style.top = Math.min(Math.max(pos.y, 76), maxY) + 'px';
+        }
+    } catch (e) {}
+
+    let startX = 0, startY = 0, origLeft = 0, origTop = 0, moved = false;
+
+    btn.addEventListener('pointerdown', (e) => {
+        startX = e.clientX;
+        startY = e.clientY;
+        origLeft = btn.offsetLeft;
+        origTop = btn.offsetTop;
+        moved = false;
+        try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+
+        const onMove = (ev) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            if (!moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return; // 阈值内视为点击
+            moved = true;
+            const maxX = Math.max(0, window.innerWidth - btn.offsetWidth);
+            const maxY = Math.max(0, window.innerHeight - btn.offsetHeight);
+            btn.style.left = Math.min(Math.max(origLeft + dx, 0), maxX) + 'px';
+            btn.style.top = Math.min(Math.max(origTop + dy, 76), maxY) + 'px';
+        };
+        const onUp = () => {
+            btn.removeEventListener('pointermove', onMove);
+            btn.removeEventListener('pointerup', onUp);
+            if (moved) {
+                try {
+                    localStorage.setItem('floatingMenuPos', JSON.stringify({ x: btn.offsetLeft, y: btn.offsetTop }));
+                } catch (err) {}
+            }
+        };
+        btn.addEventListener('pointermove', onMove);
+        btn.addEventListener('pointerup', onUp);
+    });
+
+    // 去掉内联 onclick，统一在此处理：拖动过则拦截，否则开菜单
+    btn.removeAttribute('onclick');
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (moved) { moved = false; return; }
+        if (typeof toggleSidebar === 'function') toggleSidebar();
+    });
+})();
+

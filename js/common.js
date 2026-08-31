@@ -103,7 +103,6 @@ function parseCSV(text) {
 // ---------- IndexedDB 词典 ----------
 const DICT_DB_NAME = 'WordMemorizerDict';
 const DICT_STORE_WORDS = 'words';
-const DICT_STORE_PRESET = 'presetLists';
 const DICT_DB_VERSION = 2;
 
 function openDictDB() {
@@ -114,73 +113,10 @@ function openDictDB() {
             if (!db.objectStoreNames.contains(DICT_STORE_WORDS)) {
                 db.createObjectStore(DICT_STORE_WORDS, { keyPath: 'word' });
             }
-            if (!db.objectStoreNames.contains(DICT_STORE_PRESET)) {
-                db.createObjectStore(DICT_STORE_PRESET, { keyPath: 'tag' });
-            }
         };
         req.onsuccess = (e) => resolve(e.target.result);
         req.onerror = (e) => reject(e.target.error);
     });
-}
-
-// 从 IndexedDB 全量加载词典到内存（页面打开时自动调用）
-async function loadDictToMemory() {
-    if (window.dictLoaded || window.dictLoading) return;
-    window.dictLoading = true;
-    showImportHint('正在打开词典数据库...');
-    try {
-        const db = await openDictDB();
-        const map = new Map();
-        // 使用游标分批读取（每批 10000 条），实时更新加载进度，避免一次性读取卡死页面
-        await new Promise((resolve, reject) => {
-            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
-            const store = tx.objectStore(DICT_STORE_WORDS);
-            const countReq = store.count();
-            countReq.onsuccess = () => {
-                const total = countReq.result || 0;
-                if (total === 0) { resolve(); return; }
-                let done = 0;
-                let buffer = [];
-                const flush = () => {
-                    for (const entry of buffer) {
-                        if (entry.word) map.set(entry.word.toLowerCase(), entry);
-                    }
-                    buffer = [];
-                };
-                const req = store.openCursor();
-                req.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        buffer.push(cursor.value);
-                        done++;
-                        if (buffer.length >= 10000) {
-                            flush();
-                            const pct = Math.round(done / total * 100);
-                            showImportHint('正在加载词典 ' + pct + '%（' + done + '/' + total + '）');
-                        }
-                        // 同步继续游标，保持事务活跃（setTimeout 会让 readonly 事务失效导致停滞）
-                        cursor.continue();
-                    } else {
-                        flush();
-                        resolve();
-                    }
-                };
-                req.onerror = (e) => reject(e.target.error);
-            };
-            countReq.onerror = (e) => reject(e.target.error);
-        });
-        if (map.size > 0) {
-            window.dictData = map;
-            window.dictLoaded = true;
-        }
-        hideImportHint();
-        window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: map.size } }));
-    } catch (e) {
-        console.warn('词典加载失败', e);
-        hideImportHint();
-    } finally {
-        window.dictLoading = false;
-    }
 }
 
 // 从 IndexedDB 查询词条，兼容大小写：IndexedDB 主键是词条原文大小写，
@@ -244,6 +180,53 @@ async function lookupWords(wordList) {
     }
 }
 
+// 统计词典词条总数（直接读 IndexedDB）
+async function countDictEntries() {
+    try {
+        const db = await openDictDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
+            const req = tx.objectStore(DICT_STORE_WORDS).count();
+            req.onsuccess = () => resolve(req.result || 0);
+            req.onerror = () => resolve(0);
+        });
+    } catch (e) {
+        return 0;
+    }
+}
+
+// 前缀模糊查询：直接从 IndexedDB 游标扫描前缀区间，
+// 按词频排序（frq 数值小=词频高优先），跳过词频 <=0 的条目
+async function searchDictPrefix(prefix, limit) {
+    if (!prefix) return [];
+    try {
+        const db = await openDictDB();
+        const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
+        const store = tx.objectStore(DICT_STORE_WORDS);
+        const range = IDBKeyRange.bound(prefix, prefix + '\uffff', false, false);
+        const matches = [];
+        await new Promise((resolve, reject) => {
+            const req = store.openCursor(range);
+            req.onsuccess = (e) => {
+                const cur = e.target.result;
+                if (cur) {
+                    const key = String(cur.key);
+                    const frq = parseInt(cur.value.frq, 10) || 0;
+                    if (key !== prefix && frq > 0) matches.push({ entry: cur.value, frq });
+                    cur.continue();
+                } else {
+                    resolve();
+                }
+            };
+            req.onerror = () => reject(req.error);
+        });
+        matches.sort((a, b) => a.frq - b.frq);
+        return matches.slice(0, limit).map(x => x.entry);
+    } catch (e) {
+        return [];
+    }
+}
+
 // 检查单词是否已导入（IndexedDB 中有数据）
 async function isDictLoaded() {
     try {
@@ -280,84 +263,38 @@ function getLocalStorageUsage() {
     return total;
 }
 
-// 检测浏览器真实的 localStorage 配额（不清除现有数据，追加写入直到失败）
-// 结果缓存到 localStorage，只检测一次
-let _cachedQuota = null;
-function detectLocalStorageQuota() {
-    if (_cachedQuota !== null) return _cachedQuota;
-    try {
-        const cached = localStorage.getItem('_ls_quota_v2');
-        if (cached) {
-            const val = parseInt(cached, 10);
-            if (val > 0) {
-                _cachedQuota = val;
-                return _cachedQuota;
-            }
-        }
-    } catch (e) {}
-
-    try {
-        // 清理可能残留的测试数据
-        for (let i = 0; i < 250; i++) {
-            try { localStorage.removeItem('_qtest_' + i); } catch (e) {}
-        }
-        try { localStorage.removeItem('_quota_test_'); } catch (e) {}
-
-        const chunk = 'a'.repeat(51200); // 100KB(UTF-16)
-        const keys = [];
-        let count = 0;
-        // 写入循环用独立 try-catch，达到配额时抛出，不跳过后续清理
-        try {
-            while (count < 100) { // 安全上限 10MB
-                const key = '_qtest_' + count;
-                localStorage.setItem(key, chunk);
-                keys.push(key);
-                count++;
-            }
-        } catch (e) {
-            // 达到配额上限，count 即为成功写入的块数
-        }
-        // 始终清理测试数据
-        for (let i = 0; i < keys.length; i++) {
-            try { localStorage.removeItem(keys[i]); } catch (e) {}
-        }
-        const used = getLocalStorageUsage();
-        const quota = used + count * 102400;
-        _cachedQuota = quota;
-        try { localStorage.setItem('_ls_quota_v2', String(quota)); } catch (e) {}
-        return quota;
-    } catch (e) {
-        // 检测失败，回退到常规5MB
-        _cachedQuota = 5 * 1048576;
-        return _cachedQuota;
-    }
-}
-
-function updateMemUsage() {
+// 存储用量显示：localStorage 已用 + IndexedDB 已用 + 剩余空间
+// IndexedDB 用量 ≈ 浏览器总用量(navigator.storage.estimate) − localStorage 用量
+async function updateMemUsage() {
     const el = document.getElementById('memUsage');
     if (!el) return;
-    const usedBytes = getLocalStorageUsage();
-    const usedMB = (usedBytes / 1048576).toFixed(2);
-    if (_cachedQuota !== null) {
-        const quotaMB = (_cachedQuota / 1048576).toFixed(2);
-        el.textContent = '存储 ' + usedMB + '/' + quotaMB + 'MB';
-        el.title = 'localStorage 已用 / 浏览器配额';
-    } else {
-        el.textContent = '存储 ' + usedMB + 'MB';
-        el.title = 'localStorage 已用';
-    }
+    const lsUsed = getLocalStorageUsage();
+    const lsMB = (lsUsed / 1048576).toFixed(2);
+    let idbMB = '0.00';
+    let remainMB = '--';
+    try {
+        if (navigator.storage && typeof navigator.storage.estimate === 'function') {
+            const est = await navigator.storage.estimate();
+            if (est && typeof est.usage === 'number' && typeof est.quota === 'number') {
+                const idbUsed = Math.max(0, est.usage - lsUsed); // IndexedDB ≈ 总量 - localStorage
+                idbMB = (idbUsed / 1048576).toFixed(2);
+                remainMB = (Math.max(0, est.quota - est.usage) / 1048576).toFixed(2);
+            }
+        }
+    } catch (e) { /* 统计失败则忽略 */ }
+    // 分两行显示：第一行 localStorage，第二行 IndexedDB + 剩余空间
+    el.innerHTML = '本地 ' + lsMB + 'MB<br>IndexedDB ' + idbMB + 'MB · 剩 ' + remainMB + 'MB';
+    el.title = 'localStorage 已用 ' + lsMB + 'MB；IndexedDB 已用 ' + idbMB + 'MB；剩余 ' + remainMB + 'MB（来源：navigator.storage.estimate）';
 }
 
-// ---------- 内置词典自动导入（APK 首次启动时从 ecdict.csv 导入） ----------
-let _autoImportShown = false;
+// ---------- 内置词典自动导入（首次启动时从 ecdict.csv 导入） ----------
 function showImportHint(text) {
     let el = document.getElementById('autoImportHint');
     if (!el) {
         el = document.createElement('div');
         el.id = 'autoImportHint';
-        el.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9999;background:#3a3c44;border:1px solid #5a5c66;color:#fff;padding:10px 18px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.4);max-width:90%;text-align:center;font-size:14px;';
+        el.style.cssText = 'position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:9999;background:#3a3c44;border:1px solid #5a5c66;color:#fff;padding:10px 18px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.4);max-width:90%;text-align:center;font-size:14px;';
         document.body.appendChild(el);
-        _autoImportShown = true;
     }
     el.textContent = text;
 }
@@ -442,9 +379,8 @@ async function autoImportDictFromCSV() {
             await new Promise(r => setTimeout(r, 0));
         }
 
-        showImportHint('词典导入完成，正在加载...');
-        await loadDictToMemory();
-        window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: window.dictData ? window.dictData.size : 0 } }));
+        showImportHint('词典导入完成');
+        window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: done } }));
         hideImportHint();
         console.log('内置词典自动导入完成');
     } catch (e) {
@@ -457,24 +393,10 @@ async function autoImportDictFromCSV() {
 
 // ---------- 页面初始化 ----------
 document.addEventListener('DOMContentLoaded', () => {
-    // 只在查单词页面全量加载词典到内存（用于搜索建议/模糊匹配）
-    // 背单词页面不自动加载，添加单词时按需查 IndexedDB，避免打开时等待
-    if (document.getElementById('searchInput')) {
-        // 查单词页：先确保词典已导入（首次自动从 ecdict.csv 导入 IndexedDB），再加载到内存
-        autoImportDictFromCSV().then(() => loadDictToMemory());
-    } else {
-        // 其他页面：后台自动导入内置词典（不阻塞 UI）
-        autoImportDictFromCSV();
-    }
-    // 清理可能残留的配额检测数据
-    for (let i = 0; i < 250; i++) {
-        try { localStorage.removeItem('_qtest_' + i); } catch (e) {}
-    }
-    try { localStorage.removeItem('_quota_test_'); } catch (e) {}
-    // 存储用量显示
-    updateMemUsage();
-    // 检测真实配额（同步执行，首次约几十到几百毫秒，结果缓存）
-    detectLocalStorageQuota();
+    // 词典统一存于 IndexedDB：打开页面仅确保导入，不加载到内存；
+    // 查询（含搜索建议/前缀模糊）均直接从 IndexedDB 读取，避免全量加载占内存
+    autoImportDictFromCSV();
+    // 显示存储用量（localStorage + IndexedDB + 剩余空间），每 5 秒刷新
     updateMemUsage();
     setInterval(updateMemUsage, 5000);
 });
