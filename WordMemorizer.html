@@ -80,6 +80,21 @@
                     <span>开启选择</span>
                     <input type="checkbox" class="onoff" id="switchBtn" checked onclick="showOption()">
                 </div>
+                <div class="option-sub-box hidden" id="optionSubBox">
+                    <div class="setting-row" id="optionCountRow">
+                        <span>选项个数</span>
+                        <select id="optionCountSelect" onchange="applyOptionCount()">
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                    </div>
+                    <div class="setting-row" id="detailMeaningRow">
+                        <span>详细释义</span>
+                        <input type="checkbox" class="onoff" id="detailMeaningBtn" onclick="applyDetailMeaning()">
+                    </div>
+                </div>
                 <div class="setting-row">
                     <span>开启拼写</span>
                     <input type="checkbox" class="onoff" id="spellBtn" onclick="applySpell()">
@@ -107,7 +122,7 @@
                 <div id="roundSummary" style="margin-bottom:14px; color:#c0c4cc; font-size:0.95rem;"></div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button id="roundDelKnownBtn" onclick="roundDeleteKnown()">删除已认识的单词</button>
-                    <button id="roundNewUnknownBtn" onclick="roundCreateUnknownList()">以不认识的单词新建列表</button>
+                    <button id="roundNewUnknownBtn" onclick="roundCreateUnknownList()">拆分不认识单词</button>
                 </div>
             </div>
         </div>
@@ -197,6 +212,8 @@
                     <button class="options" id="optionButton2" onclick="isOptionCorrect(2)">选项2</button>
                     <button class="options" id="optionButton3" onclick="isOptionCorrect(3)">选项3</button>
                     <button class="options" id="optionButton4" onclick="isOptionCorrect(4)">选项4</button>
+                    <button class="options" id="optionButton5" onclick="isOptionCorrect(5)">选项5</button>
+                    <button class="options" id="optionButton6" onclick="isOptionCorrect(6)">选项6</button>
                 </div>
 
                 <div style="display: flex; gap: 1%;">
@@ -215,6 +232,14 @@
     </main>
 
     <script src="js/common.js?v=5"></script>
+    <script src="data/preset_zk.js"></script>
+    <script src="data/preset_gk.js"></script>
+    <script src="data/preset_cet4.js"></script>
+    <script src="data/preset_cet6.js"></script>
+    <script src="data/preset_ky.js"></script>
+    <script src="data/preset_ielts.js"></script>
+    <script src="data/preset_toefl.js"></script>
+    <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=2"></script>
     <script src="js/script.js?v=10"></script>
 

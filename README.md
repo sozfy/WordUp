@@ -27,7 +27,8 @@
 │   ├── dict.js             # 查单词页逻辑
 │   └── generate_preset.js  # 预设词表生成脚本（Node.js）
 ├── data/
-│   ├── preset_data.js      # 预生成的预设词表（已提交）
+│   ├── preset_data.js      # 预设词表汇总入口（已提交）
+│   ├── preset_<tag>.js      # 8 套预设词表，按 tag 拆分（zk/gk/cet4/cet6/ky/ielts/toefl/gre）
 │   └── ecdict.csv          # ECDICT 词典（见下方说明，未纳入版本控制）
 ├── README.md
 ├── LICENSE
@@ -73,7 +74,7 @@ cd js
 node generate_preset.js
 ```
 
-脚本读取 `data/ecdict.csv`，按 tag 分类生成 `data/preset_data.js`。
+脚本读取 `data/ecdict.csv`，按 tag 分类生成 `data/preset_<tag>.js`（每个词表一个文件）及汇总入口 `data/preset_data.js`。
 
 ## 📊 数据来源
 
