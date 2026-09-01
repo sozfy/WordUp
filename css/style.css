@@ -468,6 +468,25 @@ button, a, .onoff, input, textarea, select {
     font-size: 0.95rem;
 }
 
+/* 选项详细设置分组：加深背景 + 左右留白 */
+.option-sub-box {
+    background-color: #2f3137;
+    border-radius: 8px;
+    padding: 6px 14px;
+    margin: 2px 0 6px;
+}
+
+.setting-row select {
+    background-color: #3a3c44;
+    color: #fff;
+    border: 1px solid #5a5c66;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
 /* ---------- 主内容区 ---------- */
 .main-content {
     color: inherit;
@@ -635,7 +654,7 @@ button, a, .onoff, input, textarea, select {
     font-size: 1.1rem;
     color: #67c23a;
     margin-top: 0.5rem;
-    white-space: pre-wrap;
+    white-space: normal;
 }
 
 /* 词意互换：意思用小字号（绿）、单词用大字号（白），位置不变 */
@@ -756,6 +775,15 @@ button.options {
 
 button.options:hover:not(:disabled) {
     background-color: #dddddd;
+}
+
+/* 详细释义：选项长释义不省略、全部换行展示 */
+button.options.detail {
+    white-space: pre-wrap;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* ---------- 文本输入 ---------- */
