@@ -80,8 +80,19 @@ result.forEach(r => console.log('  ' + r.name + ': ' + r.count + ' 词'));
 const totalWords = result.reduce((s, r) => s + r.count, 0);
 console.log('\n总计: ' + totalWords + ' 词条（含重复）');
 
-const output = 'window.PRESET_LISTS = ' + JSON.stringify(result) + ';';
-const outPath = path.join(__dirname, '..', 'data', 'preset_data.js');
-fs.writeFileSync(outPath, output, 'utf8');
-const fileSize = (fs.statSync(outPath).size / 1048576).toFixed(2);
-console.log('\n已保存到 preset_data.js (' + fileSize + ' MB)');
+// 按词表拆分输出：每个词表一个 preset_<tag>.js，另写汇总入口 preset_data.js
+const outDir = path.join(__dirname, '..', 'data');
+const entryLines = [
+    '// 预设词表汇总入口：8 套词表分别由 data/preset_<tag>.js 提供',
+    '// 加载顺序：preset_zk/gk/cet4/cet6/ky/ielts/toefl/gre.js → 本文件',
+    'window.PRESET_LISTS = ['
+];
+result.forEach(r => {
+    const fp = path.join(outDir, 'preset_' + r.tag + '.js');
+    fs.writeFileSync(fp, 'window.PRESET_' + r.tag + ' = ' + JSON.stringify(r) + ';\n', 'utf8');
+    console.log('  已写入 ' + path.relative(path.join(__dirname, '..'), fp));
+    entryLines.push('    window.PRESET_' + r.tag + ',');
+});
+entryLines.push('].filter(Boolean);');
+fs.writeFileSync(path.join(outDir, 'preset_data.js'), entryLines.join('\n') + '\n', 'utf8');
+console.log('\n已生成 8 个词表文件 + 汇总入口 preset_data.js');

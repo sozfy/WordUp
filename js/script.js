@@ -413,6 +413,35 @@ function updateRemainCount() {
     document.getElementById('remainCount').textContent = '待抽取个数：' + list.pendingWords.length;
 }
 
+// ---------- 选项设置：个数（3~6）与详细释义 ----------
+function getOptionCount() {
+    const sel = document.getElementById('optionCountSelect');
+    let n = sel ? parseInt(sel.value, 10) : 4;
+    if (!n || n < 3 || n > 6) n = 4;
+    return n;
+}
+
+function applyOptionCount() {
+    const sel = document.getElementById('optionCountSelect');
+    if (!sel) return;
+    try { localStorage.setItem('optionCount', sel.value); } catch (e) {}
+    createOptions();
+    showOption();
+}
+
+function isDetailMeaningOn() {
+    const d = document.getElementById('detailMeaningBtn');
+    return !!(d && d.checked);
+}
+
+function applyDetailMeaning() {
+    const d = document.getElementById('detailMeaningBtn');
+    if (!d) return;
+    try { localStorage.setItem('detailMeaningMode', d.checked ? '1' : '0'); } catch (e) {}
+    createOptions();
+    showOption();
+}
+
 function showOption() {
     const optionDiv = document.getElementById('optionDiv');
     const list = getActiveList();
@@ -425,12 +454,15 @@ function showOption() {
         updateSpellInput();
     }
     const switchOn = !!(switchBtn && switchBtn.checked);
-    const enoughWords = list.words && list.words.length >= 4;
+    const enoughWords = list.words && list.words.length >= getOptionCount();
     if (switchOn && enoughWords) {
         optionDiv.classList.remove('hidden');
     } else {
         optionDiv.classList.add('hidden');
     }
+    // 开启选项时显示"选项个数 / 详细释义"详细设置分组
+    const subBox = document.getElementById('optionSubBox');
+    if (subBox) subBox.classList.toggle('hidden', !switchOn);
 }
 
 // 记录当前显示的词表 id，用于在切换词表时清空"上一个单词"等瞬时信息
@@ -450,8 +482,9 @@ function updateDraw() {
 
     if (list.selectedWord) {
         const swap = isSwapOn();
-        document.getElementById('currentWord').textContent = swap ? normalizeNewlines(list.selectedWord.meaning) : list.selectedWord.word;
-        document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : normalizeNewlines(list.selectedWord.meaning);
+        const meaningText = flattenNewlines(list.selectedWord.meaning);
+        document.getElementById('currentWord').textContent = swap ? meaningText : list.selectedWord.word;
+        document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : meaningText;
         document.getElementById('currentMeaning').classList.add('hidden');
     } else {
         document.getElementById('startButton').disabled = false;
@@ -503,29 +536,35 @@ function refreshCurrentList() {
 let optionsText = [];
 
 function disableOptionButtons() {
-    for (let i = 1; i <= 4; i++) {
-        document.getElementById("optionButton" + i).disabled = true;
+    for (let i = 1; i <= 6; i++) {
+        const btn = document.getElementById("optionButton" + i);
+        if (btn) btn.disabled = true;
     }
 }
 
 // 将选项按钮恢复为占位文本（切换词表/未开始抽取时清空残留选项）
 function resetOptionText() {
-    for (let i = 1; i <= 4; i++) {
-        document.getElementById("optionButton" + i).textContent = '选项' + i;
+    for (let i = 1; i <= 6; i++) {
+        const btn = document.getElementById("optionButton" + i);
+        if (btn) btn.textContent = '选项' + i;
     }
 }
 
 function createOptions() {
-    for (let i = 1; i <= 4; i++) {
+    const count = getOptionCount();
+    for (let i = 1; i <= 6; i++) {
         const btn = document.getElementById("optionButton" + i);
+        if (!btn) continue;
         btn.style.backgroundColor = '';
         btn.style.whiteSpace = '';
         btn.style.wordBreak = '';
+        btn.style.display = (i <= count) ? '' : 'none';
+        btn.classList.remove('detail');
         btn.disabled = false;
     }
 
     const list = getActiveList();
-    if (!list.words || list.words.length < 4) {
+    if (!list.words || list.words.length < count) {
         document.getElementById('optionDiv').classList.add('hidden');
         resetOptionText();
         disableOptionButtons();
@@ -542,36 +581,49 @@ function createOptions() {
         document.getElementById('optionDiv').classList.remove('hidden');
     }
 
-    const rightPos = Math.floor(Math.random() * 4);
+    const rightPos = Math.floor(Math.random() * count);
 
     const wrong = [];
-    while (wrong.length < 3) {
+    while (wrong.length < count - 1) {
         const candidate = list.words[Math.floor(Math.random() * list.words.length)];
         if (candidate.word !== list.selectedWord.word && !wrong.includes(candidate)) {
             wrong.push(candidate);
         }
     }
 
-    optionsText = wrong.slice(0, 3);
+    optionsText = wrong.slice(0, count - 1);
     optionsText.splice(rightPos, 0, list.selectedWord);
 
     const swap = isSwapOn();
-    for (let i = 1; i <= 4; i++) {
-        document.getElementById("optionButton" + i).innerText = swap ? optionsText[i - 1].word : flattenNewlines(optionsText[i - 1].meaning);
+    const full = isDetailMeaningOn();
+    for (let i = 1; i <= count; i++) {
+        const btn = document.getElementById("optionButton" + i);
+        const item = optionsText[i - 1];
+        if (swap) {
+            btn.innerText = item.word;
+        } else {
+            btn.innerText = flattenNewlines(item.meaning);
+            btn.classList.toggle('detail', full);
+        }
     }
 }
 
 function isOptionCorrect(num) {
     const list = getActiveList();
     const selectedOption = optionsText[num - 1];
+    const count = getOptionCount();
 
     // 先重置所有选项样式（允许重新选择）
-    for (let i = 1; i <= 4; i++) {
+    const full = isDetailMeaningOn();
+    const swap = isSwapOn();
+    for (let i = 1; i <= count; i++) {
         const btn = document.getElementById("optionButton" + i);
         btn.style.backgroundColor = '';
         btn.style.whiteSpace = '';
         btn.style.wordBreak = '';
-        btn.innerText = isSwapOn() ? optionsText[i - 1].word : flattenNewlines(optionsText[i - 1].meaning);
+        btn.classList.toggle('detail', full);
+        const item = optionsText[i - 1];
+        btn.innerText = swap ? item.word : flattenNewlines(item.meaning);
     }
 
     // 标记当前选中项
@@ -588,6 +640,11 @@ function isOptionCorrect(num) {
     markedBtn.style.whiteSpace = 'normal';
     markedBtn.style.wordBreak = 'break-word';
 
+    // 点击选项后显示当前单词的意思（选择题模式）
+    const meaningEl = document.getElementById('currentMeaning');
+    if (meaningEl) meaningEl.classList.remove('hidden');
+    document.getElementById('checkButton1').disabled = false;
+    document.getElementById('checkButton2').disabled = false;
 }
 
 // ---------- 核心抽取逻辑 ----------
@@ -664,17 +721,19 @@ function drawWord(num) {
     saveWordData(data);
 
     const swap = isSwapOn();
-    document.getElementById('currentWord').textContent = swap ? normalizeNewlines(list.selectedWord.meaning) : list.selectedWord.word;
-    document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : normalizeNewlines(list.selectedWord.meaning);
+    const meaningText = flattenNewlines(list.selectedWord.meaning);
+    document.getElementById('currentWord').textContent = swap ? meaningText : list.selectedWord.word;
+    document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : meaningText;
     document.getElementById('currentMeaning').classList.add('hidden');
 
     // 显示意思按钮常开；认识/不认识需先点一次显示意思
     document.getElementById('checkButton1').disabled = true;
     document.getElementById('checkButton2').disabled = true;
 
-    // 重新激活选项按钮
-    for (let i = 1; i <= 4; i++) {
-        document.getElementById("optionButton" + i).disabled = false;
+    // 重新激活选项按钮（多余按钮由 createOptions 隐藏）
+    for (let i = 1; i <= 6; i++) {
+        const btn = document.getElementById("optionButton" + i);
+        if (btn) btn.disabled = false;
     }
 
     createOptions();
@@ -850,8 +909,9 @@ function applySwap() {
     // 3) 逻辑互换：刷新当前显示内容与选项（若正在抽词）
     const list = getActiveList();
     if (list && list.selectedWord) {
-        document.getElementById('currentWord').textContent = swap ? normalizeNewlines(list.selectedWord.meaning) : list.selectedWord.word;
-        document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : normalizeNewlines(list.selectedWord.meaning);
+        const meaningText = flattenNewlines(list.selectedWord.meaning);
+        document.getElementById('currentWord').textContent = swap ? meaningText : list.selectedWord.word;
+        document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : meaningText;
         document.getElementById('currentMeaning').classList.add('hidden');
     }
     createOptions();
@@ -913,16 +973,17 @@ async function roundCreateUnknownList() {
     const list = getActiveList(data);
     const unknownWords = list.roundUnknown || [];
     if (unknownWords.length === 0) { showToast('本轮没有不认识的单词', 'warning'); return; }
-    // 查词典补释义
+    const unknownSet = new Set(unknownWords.map(w => String(w).toLowerCase()));
+    // 拆分：从当前词表取出不认识的单词（不再复制留底）
+    const splitOut = list.words.filter(w => unknownSet.has(String(w.word).toLowerCase()));
+    if (splitOut.length === 0) { showToast('未找到不认识的单词', 'warning'); return; }
+    // 查词典补齐缺失释义
     let result = new Map();
-    try { result = await lookupWords(unknownWords); } catch (e) {}
-    const newWords = unknownWords.map(w => {
-        const e = result.get(w.toLowerCase());
-        return {
-            word: e ? e.word : w,
-            meaning: e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)',
-            mnemonic: null
-        };
+    try { result = await lookupWords(splitOut.map(w => w.word)); } catch (e) {}
+    const newWords = splitOut.map(w => {
+        if (w.meaning && w.meaning !== '(无释义)') return w;
+        const e = result.get(String(w.word).toLowerCase());
+        return { ...w, meaning: e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)' };
     });
     // 新词表名称（避免重名）
     let baseName = list.name + '-不认识';
@@ -937,6 +998,8 @@ async function roundCreateUnknownList() {
         selectedWord: null
     };
     data.lists.push(newList);
+    // 从原词表移除这些词（拆分语义）
+    list.words = list.words.filter(w => !unknownSet.has(String(w.word).toLowerCase()));
     list.pendingWords = [...list.words];
     list.selectedWord = null;
     list.roundKnown = [];
@@ -945,7 +1008,7 @@ async function roundCreateUnknownList() {
     closeModal('roundModal');
     renderSidebarLists();
     applyResetDraw();
-    showToast('已用 ' + newWords.length + ' 个不认识的单词新建列表"' + name + '"', 'success');
+    showToast('已拆分 ' + splitOut.length + ' 个不认识的单词到列表"' + name + '"', 'success');
 }
 
 function roundFinishClose() {
@@ -1055,12 +1118,15 @@ function applyResetDraw() {
     document.getElementById('lastWord').textContent = '上一个单词';
 
     // 清空选项
-    for (let i = 1; i <= 4; i++) {
+    resetOptionText();
+    for (let i = 1; i <= 6; i++) {
         const btn = document.getElementById('optionButton' + i);
-        btn.textContent = '选项' + i;
+        if (!btn) continue;
         btn.style.backgroundColor = '';
         btn.style.whiteSpace = '';
         btn.style.wordBreak = '';
+        btn.style.display = (i <= getOptionCount()) ? '' : 'none';
+        btn.classList.remove('detail');
         btn.disabled = true;
     }
     // 按选择题开关状态决定选项区显隐（修复：开启选项时重置后不应隐藏）
@@ -1157,6 +1223,22 @@ function clearAllWords() {
             try { localStorage.setItem('optionMode', switchBtn.checked ? '1' : '0'); } catch (e) {}
         });
     }
+    // 恢复"选项个数"设置
+    const optionCountSelect = document.getElementById('optionCountSelect');
+    if (optionCountSelect) {
+        try {
+            const v = localStorage.getItem('optionCount');
+            if (v === '3' || v === '4' || v === '5' || v === '6') optionCountSelect.value = v;
+        } catch (e) {}
+    }
+    // 恢复"详细释义"设置
+    const detailMeaningBtn = document.getElementById('detailMeaningBtn');
+    if (detailMeaningBtn) {
+        try { detailMeaningBtn.checked = localStorage.getItem('detailMeaningMode') === '1'; } catch (e) {}
+    }
+    // 应用选项设置后刷新选项区与详细设置行显隐
+    createOptions();
+    showOption();
 
     // 绑定底部按钮事件
     const footerBtns = document.querySelectorAll('.footer-icon-btn');
