@@ -1,3 +1,61 @@
+:root {
+    /* 背景 */
+    --bg-main: #3a3c44;
+    --bg-panel: #464850;
+    --bg-deep: #2b2d33;
+    --bg-sub-box: #2f3137;
+    --bg-overlay: #30333cba;
+    --bg-overlay-weak: #30333c88;
+
+    /* 边框 */
+    --border: #5a5c66;
+
+    /* 文字 */
+    --white: #ffffff;
+    --black: #000;
+    --text-main: #ffffff;
+    --text-secondary: #909399;
+    --text-tertiary: #c0c4cc;
+    --text-light: #d8d9dd;
+    --text-light-2: #d9dce1;
+    --text-dim: #6a6c76;
+    --text-muted: #9aa0a6;
+    --text-soft: #b3b0b0;
+    --text-soft-2: #9c9b9b;
+    --text-faint: #dddddd;
+    --text-faint-2: #cccccc;
+    --text-faint-3: #f0f0f0;
+    --text-faint-4: #666;
+
+    /* 主色 / 强调 */
+    --accent: #409eff;
+    --accent-dark: #1981CA;
+    --accent-soft: #3498db;
+    --accent-deep: #2980b9;
+    --accent-20: #409eff33;
+    --highlight: #baecff;
+
+    /* 状态色 */
+    --success: #67c23a;
+    --success-dark: #58ad2f;
+    --success-soft: #c9f2d2;
+    --warning: #e6a23c;
+    --warning-soft: #ffe8bf;
+    --danger: #f56c6c;
+    --danger-2: #e85555;
+    --danger-dark: #e74c3c;
+    --danger-deep: #c0392b;
+    --danger-soft: #ffd4d4;
+    --danger-20: #f56c6c33;
+
+    /* 遮罩 / 阴影 */
+    --overlay-30: rgba(0, 0, 0, 0.3);
+    --overlay-40: rgba(0, 0, 0, 0.4);
+    --overlay-50: rgba(0, 0, 0, 0.5);
+    --overlay-55: rgba(0, 0, 0, 0.55);
+    --overlay-60: rgba(0, 0, 0, 0.6);
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -10,9 +68,9 @@ body {
     font-family: BlinkMacSystemFont, -apple-system, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
     margin: 0;
     padding: 0;
-    color: rgb(255, 255, 255) !important;
+    color: var(--white) !important;
     text-decoration: none !important;
-    background-color: #464850;
+    background-color: var(--bg-panel);
     overflow-y: scroll;
     display: flex;
     flex-direction: column;
@@ -30,7 +88,7 @@ body {
 
 h1 {
     text-align: center;
-    color: #baecff;
+    color: var(--highlight);
     margin-bottom: 1rem;
     font-size: clamp(1.4rem, 4vw, 1.8rem);
 }
@@ -46,7 +104,7 @@ h1 {
     z-index: 99;
     min-width: 320px;
     color: inherit;
-    background-color: #3a3c44;
+    background-color: var(--bg-main);
     padding: 0 16px;
     /* 刘海屏横向安全区 */
     padding: 0 calc(16px + env(safe-area-inset-left)) 0 calc(16px + env(safe-area-inset-right));
@@ -54,7 +112,7 @@ h1 {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0px 0px 10px 3px #30333cba;
+    box-shadow: 0px 0px 10px 3px var(--bg-overlay);
     box-sizing: border-box;
 }
 
@@ -68,7 +126,7 @@ h1 {
     display: flex;
     align-items: center;
     text-decoration: none;
-    color: #baecff;
+    color: var(--highlight);
     font-weight: bold;
 }
 
@@ -84,7 +142,7 @@ h1 {
 .banner-divider {
     width: 1px;
     height: 24px;
-    background-color: #5a5c66;
+    background-color: var(--border);
     flex: 0 0 auto;
 }
 
@@ -97,7 +155,7 @@ h1 {
 }
 
 .bannerLeftBox a.nav-link:hover {
-    color: #ffffff !important;
+    color: var(--white) !important;
 }
 
 /* ---------- 浮动菜单按钮（独立于导航栏） ---------- */
@@ -115,24 +173,24 @@ h1 {
     justify-content: center;
     align-items: center;
     gap: 4px;
-    background: #3a3c44;
-    border: 1px solid #5a5c66;
+    background: var(--bg-main);
+    border: 1px solid var(--border);
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px var(--overlay-30);
     transition: opacity 0.3s ease, visibility 0.3s ease, background 0.2s;
     padding: 0;
 }
 
 .floating-menu-btn:hover {
-    background: #464850;
+    background: var(--bg-panel);
 }
 
 .floating-menu-btn span {
     display: block;
     width: 20px;
     height: 3px;
-    background-color: #baecff;
+    background-color: var(--highlight);
     border-radius: 2px;
 }
 
@@ -153,7 +211,7 @@ button, a, .onoff, input, textarea, select {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay-50);
     z-index: 150;
     opacity: 0;
     visibility: hidden;
@@ -174,8 +232,8 @@ button, a, .onoff, input, textarea, select {
     bottom: 0;
     width: 320px;
     max-width: 85vw;
-    background: #3a3c44;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.3);
+    background: var(--bg-main);
+    box-shadow: 2px 0 12px var(--overlay-30);
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.3s ease;
@@ -190,14 +248,14 @@ button, a, .onoff, input, textarea, select {
 
 .sidebar-header {
     padding: 16px 20px;
-    border-bottom: 1px solid #5a5c66;
+    border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .sidebar-header h3 {
-    color: #baecff;
+    color: var(--highlight);
     font-size: 1.1rem;
     margin: 0;
 }
@@ -212,7 +270,7 @@ button, a, .onoff, input, textarea, select {
     background: transparent;
     border: none;
     border-radius: 6px;
-    color: #baecff;
+    color: var(--highlight);
     cursor: pointer;
     transition: background 0.2s;
     padding: 0;
@@ -221,7 +279,7 @@ button, a, .onoff, input, textarea, select {
 }
 
 .icon-btn:hover {
-    background-color: #464850;
+    background-color: var(--bg-panel);
 }
 
 /* 词表列表容器 */
@@ -244,12 +302,12 @@ button, a, .onoff, input, textarea, select {
 }
 
 .sidebar-list-item:hover {
-    background-color: #464850;
+    background-color: var(--bg-panel);
 }
 
 .sidebar-list-item.active {
-    background-color: #409eff33;
-    border-left: 3px solid #409eff;
+    background-color: var(--accent-20);
+    border-left: 3px solid var(--accent);
     padding-left: 9px;
 }
 
@@ -263,7 +321,7 @@ button, a, .onoff, input, textarea, select {
 
 .list-item-name {
     font-size: 0.95rem;
-    color: #ffffff;
+    color: var(--white);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -271,12 +329,12 @@ button, a, .onoff, input, textarea, select {
 }
 
 .sidebar-list-item.active .list-item-name {
-    color: #baecff;
+    color: var(--highlight);
 }
 
 .list-item-count {
     font-size: 0.75rem;
-    color: #909399;
+    color: var(--text-secondary);
 }
 
 .list-item-actions {
@@ -294,7 +352,7 @@ button, a, .onoff, input, textarea, select {
     background: transparent;
     border: none;
     border-radius: 4px;
-    color: #909399;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
     padding: 0;
@@ -303,21 +361,21 @@ button, a, .onoff, input, textarea, select {
 }
 
 .list-action-btn:hover {
-    background-color: #5a5c66;
-    color: #ffffff;
+    background-color: var(--border);
+    color: var(--white);
 }
 
 .list-action-btn.danger:hover {
-    background-color: #f56c6c33;
-    color: #f56c6c;
+    background-color: var(--danger-20);
+    color: var(--danger);
 }
 
 /* 预设词表按钮 */
 .preset-btn {
     padding: 6px 12px;
-    background-color: #464850;
-    color: #baecff;
-    border: 1px solid #5a5c66;
+    background-color: var(--bg-panel);
+    color: var(--highlight);
+    border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 0.85rem;
     cursor: pointer;
@@ -327,8 +385,8 @@ button, a, .onoff, input, textarea, select {
 }
 
 .preset-btn:hover {
-    background-color: #409eff33;
-    border-color: #409eff;
+    background-color: var(--accent-20);
+    border-color: var(--accent);
 }
 
 /* ---------- 侧边栏底部图标按钮 ---------- */
@@ -337,15 +395,15 @@ button, a, .onoff, input, textarea, select {
     flex-direction: column;
     align-items: center;
     padding: 8px 20px 12px;
-    border-top: 1px solid #5a5c66;
-    background-color: #3a3c44;
+    border-top: 1px solid var(--border);
+    background-color: var(--bg-main);
     box-sizing: border-box;
     flex: 0 0 auto;
 }
 
 .sidebar-mem {
     font-size: 0.75rem;
-    color: #909399;
+    color: var(--text-secondary);
     text-align: center;
     margin-bottom: 4px;
     white-space: nowrap;
@@ -368,7 +426,7 @@ button, a, .onoff, input, textarea, select {
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: #baecff;
+    color: var(--highlight);
     cursor: pointer;
     transition: background 0.2s, color 0.2s;
     padding: 0;
@@ -377,8 +435,8 @@ button, a, .onoff, input, textarea, select {
 }
 
 .footer-icon-btn:hover {
-    background-color: #464850;
-    color: #ffffff;
+    background-color: var(--bg-panel);
+    color: var(--white);
 }
 
 /* ---------- 弹窗 ---------- */
@@ -388,7 +446,7 @@ button, a, .onoff, input, textarea, select {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--overlay-60);
     z-index: 300;
     display: flex;
     align-items: center;
@@ -404,7 +462,7 @@ button, a, .onoff, input, textarea, select {
 }
 
 .modal {
-    background: #3a3c44;
+    background: var(--bg-main);
     border-radius: 12px;
     width: 90%;
     max-width: 480px;
@@ -412,7 +470,7 @@ button, a, .onoff, input, textarea, select {
     max-height: 80dvh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 32px var(--overlay-40);
     transform: scale(0.9);
     transition: transform 0.25s ease;
 }
@@ -426,16 +484,16 @@ button, a, .onoff, input, textarea, select {
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid #5a5c66;
+    border-bottom: 1px solid var(--border);
     font-size: 1.05rem;
     font-weight: bold;
-    color: #baecff;
+    color: var(--highlight);
 }
 
 .modal-close {
     background: transparent;
     border: none;
-    color: #909399;
+    color: var(--text-secondary);
     font-size: 1.5rem;
     cursor: pointer;
     width: 32px;
@@ -451,8 +509,8 @@ button, a, .onoff, input, textarea, select {
 }
 
 .modal-close:hover {
-    background-color: #464850;
-    color: #ffffff;
+    background-color: var(--bg-panel);
+    color: var(--white);
 }
 
 .modal-body {
@@ -470,16 +528,25 @@ button, a, .onoff, input, textarea, select {
 
 /* 选项详细设置分组：加深背景 + 左右留白 */
 .option-sub-box {
-    background-color: #2f3137;
+    background-color: var(--bg-sub-box);
     border-radius: 8px;
     padding: 6px 14px;
     margin: 2px 0 6px;
 }
 
+/* 随机种子只读显示 */
+.seed-value {
+    color: var(--highlight);
+    font-size: 0.9rem;
+    font-family: Consolas, monospace;
+    user-select: all;
+    white-space: nowrap;
+}
+
 .setting-row select {
-    background-color: #3a3c44;
-    color: #fff;
-    border: 1px solid #5a5c66;
+    background-color: var(--bg-main);
+    color: var(--white);
+    border: 1px solid var(--border);
     border-radius: 5px;
     padding: 4px 8px;
     font-size: 0.9rem;
@@ -527,12 +594,12 @@ button, a, .onoff, input, textarea, select {
 .main-text h1 {
     font-size: clamp(1.5rem, 5vw, 2rem);
     margin-bottom: 0.5rem;
-    color: #baecff;
+    color: var(--highlight);
 }
 
 .main-text p {
     font-size: 1rem;
-    color: #c0c4cc;
+    color: var(--text-tertiary);
 }
 
 .main-box {
@@ -546,8 +613,8 @@ button, a, .onoff, input, textarea, select {
 
 .mainA1 {
     border-radius: 13px;
-    box-shadow: 0px 0px 10px 3px #30333cba;
-    color: #baecff !important;
+    box-shadow: 0px 0px 10px 3px var(--bg-overlay);
+    color: var(--highlight) !important;
     justify-content: center;
     align-items: center;
     display: flex !important;
@@ -559,20 +626,20 @@ button, a, .onoff, input, textarea, select {
     padding: 1.5rem;
     cursor: pointer;
     text-decoration: none;
-    background-color: #3a3c44;
+    background-color: var(--bg-main);
     transition: transform 0.2s, box-shadow 0.2s;
     min-width: 140px;
 }
 
 .mainA1:hover {
     transform: translateY(-3px);
-    box-shadow: 0px 4px 16px 5px #30333cba;
+    box-shadow: 0px 4px 16px 5px var(--bg-overlay);
 }
 
 .icon1 {
     height: 48px;
     width: 48px;
-    fill: #ffffff;
+    fill: var(--white);
     align-items: center;
     display: inline-flex;
     justify-content: center;
@@ -587,34 +654,34 @@ button, a, .onoff, input, textarea, select {
 /* ---------- 通用区块 ---------- */
 .section {
     width: 100%;
-    background-color: #3a3c44;
+    background-color: var(--bg-main);
     border-radius: 12px;
     padding: 1.25rem;
-    box-shadow: 0px 0px 10px 2px #30333c88;
+    box-shadow: 0px 0px 10px 2px var(--bg-overlay-weak);
 }
 
 .section h3 {
     margin-bottom: 0.75rem;
-    color: #baecff;
+    color: var(--highlight);
     font-size: 1.1rem;
 }
 
 .tip {
     font-size: 0.85rem;
-    color: #909399;
+    color: var(--text-secondary);
     margin-bottom: 0.5rem;
 }
 
 /* ---------- 抽词区 ---------- */
 .remain-count, .word-count {
     font-size: 0.9rem;
-    color: #c0c4cc;
+    color: var(--text-tertiary);
     margin: 0.5rem 0;
 }
 
 .active-list-name {
     font-size: 0.95rem;
-    color: #baecff;
+    color: var(--highlight);
     margin: 0.2rem 0 0.5rem;
     font-weight: 500;
 }
@@ -623,17 +690,17 @@ button, a, .onoff, input, textarea, select {
     text-align: center;
     margin: 1rem 0;
     padding: 1rem;
-    background-color: #464850;
+    background-color: var(--bg-panel);
     border-radius: 8px;
-    min-height: 180px;
+    min-height: 220px;
 }
 
 .word-last {
     font-size: 0.85rem;
-    color: #909399;
+    color: var(--text-secondary);
     margin-bottom: 0.5rem;
     min-height: 1.2em;
-    background-color: #3a3c44;
+    background-color: var(--bg-main);
     padding: 4px 8px;
     border-radius: 4px;
     white-space: nowrap;
@@ -644,7 +711,7 @@ button, a, .onoff, input, textarea, select {
 .word {
     font-size: clamp(1.5rem, 5vw, 2rem);
     font-weight: bold;
-    color: #ffffff;
+    color: var(--white);
     margin-bottom: 0.5rem;
     margin-top: 10px;
     word-break: break-word;
@@ -652,7 +719,7 @@ button, a, .onoff, input, textarea, select {
 
 .meaning {
     font-size: 1.1rem;
-    color: #67c23a;
+    color: var(--success);
     margin-top: 0.5rem;
     white-space: normal;
 }
@@ -661,12 +728,12 @@ button, a, .onoff, input, textarea, select {
 #currentWord.swap-mode {
     font-size: 1.1rem;
     font-weight: normal;
-    color: #67c23a;
+    color: var(--success);
 }
 #currentMeaning.swap-mode {
     font-size: 2rem;
     font-weight: bold;
-    color: #ffffff;
+    color: var(--white);
 }
 
 /* ---------- 开关 ---------- */
@@ -674,12 +741,12 @@ button, a, .onoff, input, textarea, select {
     appearance: none;
     width: 33px;
     height: 17px;
-    background: #b3b0b0;
+    background: var(--text-soft);
     border-radius: 17px;
     position: relative;
     cursor: pointer;
     outline: none;
-    border: 1px solid #9c9b9b;
+    border: 1px solid var(--text-soft-2);
     vertical-align: middle;
     margin-left: 8px;
 }
@@ -697,8 +764,8 @@ button, a, .onoff, input, textarea, select {
 }
 
 .onoff:checked {
-    background: #3498db;
-    border-color: #3498db;
+    background: var(--accent-soft);
+    border-color: var(--accent-soft);
 }
 
 .onoff:checked::after {
@@ -719,7 +786,7 @@ button {
     margin-bottom: 10px;
     border: none;
     border-radius: 5px;
-    background-color: #3498db;
+    background-color: var(--accent-soft);
     color: white;
     cursor: pointer;
     font-size: 14px;
@@ -728,42 +795,42 @@ button {
 }
 
 button:hover:not(:disabled) {
-    background-color: #2980b9;
+    background-color: var(--accent-deep);
 }
 
 button:disabled {
-    background-color: #cccccc !important;
+    background-color: var(--text-faint-2) !important;
     cursor: not-allowed !important;
-    color: #666 !important;
+    color: var(--text-faint-4) !important;
 }
 
 button.check1 {
-    background-color: #67c23a;
+    background-color: var(--success);
 }
 
 button.check1:hover:not(:disabled) {
-    background-color: #58ad2f;
+    background-color: var(--success-dark);
 }
 
 button.check2 {
-    background-color: #f56c6c;
+    background-color: var(--danger);
 }
 
 button.check2:hover:not(:disabled) {
-    background-color: #e85555;
+    background-color: var(--danger-2);
 }
 
 button.danger {
-    background-color: #e74c3c;
+    background-color: var(--danger-dark);
 }
 
 button.danger:hover:not(:disabled) {
-    background-color: #c0392b;
+    background-color: var(--danger-deep);
 }
 
 button.options {
-    background-color: #f0f0f0;
-    color: #000;
+    background-color: var(--text-faint-3);
+    color: var(--black);
     font-weight: bold;
     text-align: left;
     white-space: nowrap;
@@ -774,7 +841,7 @@ button.options {
 }
 
 button.options:hover:not(:disabled) {
-    background-color: #dddddd;
+    background-color: var(--text-faint);
 }
 
 /* 详细释义：选项长释义不省略、全部换行展示 */
@@ -791,10 +858,10 @@ textarea {
     width: 100%;
     min-height: 100px;
     padding: 10px;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    background-color: #464850;
-    color: #ffffff;
+    background-color: var(--bg-panel);
+    color: var(--white);
     font-size: 14px;
     resize: vertical;
     margin-bottom: 10px;
@@ -803,45 +870,131 @@ textarea {
 
 textarea:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: var(--accent-soft);
+}
+
+#customMeaningInput {
+    min-height: 60px;
 }
 
 input[type="text"], input[type="search"] {
     padding: 8px 12px;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
     border-radius: 5px;
-    background-color: #464850;
-    color: #ffffff;
+    background-color: var(--bg-panel);
+    color: var(--white);
     font-size: 14px;
     flex: 1;
 }
 
 input[type="text"]:focus, input[type="search"]:focus {
     outline: none;
-    border-color: #3498db;
+    border-color: var(--accent-soft);
 }
 
 /* ---------- 单词列表 ---------- */
 .word-list {
     max-height: 280px;
     overflow-y: auto;
-    background-color: #464850;
+    background-color: var(--bg-panel);
     border-radius: 8px;
     padding: 0.5rem;
     margin-top: 0.75rem;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
+}
+
+.word-search-row {
+    margin-top: 0.35rem;
+    display: flex;
+}
+
+.word-search-row input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
 }
 
 .word-item {
-    padding: 5px;
-    border-bottom: 1px solid #5a5c66;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 5px;
+    border-bottom: 1px solid var(--border);
     font-size: 14px;
     word-break: break-word;
     white-space: pre-wrap;
 }
 
+.word-item-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.word-item-index {
+    color: var(--text-tertiary);
+    flex: 0 0 auto;
+}
+
+.word-item-word {
+    color: var(--white);
+    font-weight: 500;
+    flex: 0 0 auto;
+}
+
+.word-item-mean {
+    color: var(--text-secondary);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.word-item-mean-loading {
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.word-item-del {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.word-item-del:hover {
+    color: var(--danger);
+    background-color: var(--danger-soft);
+}
+
 .word-item:last-child {
     border-bottom: none;
+}
+
+/* 侧边栏词表拖动排序 */
+.sidebar-list-item[draggable="true"] {
+    cursor: grab;
+}
+.sidebar-list-item.dragging {
+    opacity: 0.5;
+}
+.sidebar-list-item.drag-over-before {
+    box-shadow: inset 0 2px 0 0 var(--highlight);
+}
+.sidebar-list-item.drag-over-after {
+    box-shadow: inset 0 -2px 0 0 var(--highlight);
 }
 
 /* ---------- 词典查询区 ---------- */
@@ -853,29 +1006,29 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .dict-result {
-    background-color: #464850;
+    background-color: var(--bg-panel);
     border-radius: 8px;
     padding: 1.25rem;
     min-height: 100px;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
 }
 
 .dict-word {
     font-size: 1.6rem;
     font-weight: bold;
-    color: #baecff;
+    color: var(--highlight);
     margin-bottom: 0.25rem;
 }
 
 .dict-phonetic {
     font-size: 0.95rem;
-    color: #c0c4cc;
+    color: var(--text-tertiary);
     margin-bottom: 1rem;
 }
 
 .dict-section-title {
     font-size: 0.8rem;
-    color: #909399;
+    color: var(--text-secondary);
     text-transform: uppercase;
     margin-top: 0.75rem;
     margin-bottom: 0.25rem;
@@ -884,14 +1037,14 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 .dict-translation {
     font-size: 0.95rem;
-    color: #ffffff;
+    color: var(--white);
     white-space: pre-wrap;
     line-height: 1.6;
 }
 
 .dict-definition {
     font-size: 0.9rem;
-    color: #c0c4cc;
+    color: var(--text-tertiary);
     white-space: pre-wrap;
     line-height: 1.6;
 }
@@ -904,8 +1057,8 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 .dict-tag {
-    background-color: #3498db;
-    color: #ffffff;
+    background-color: var(--accent-soft);
+    color: var(--white);
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -913,7 +1066,7 @@ input[type="text"]:focus, input[type="search"]:focus {
 
 .dict-empty {
     text-align: center;
-    color: #909399;
+    color: var(--text-secondary);
     padding: 2rem;
 }
 
@@ -929,16 +1082,16 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 
 ::-webkit-scrollbar-track {
-    background: #3a3c44;
+    background: var(--bg-main);
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #5a5c66;
+    background: var(--border);
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #6a6c76;
+    background: var(--text-dim);
 }
 
 /* ---------- 响应式 ---------- */
@@ -978,10 +1131,10 @@ input[type="text"]:focus, input[type="search"]:focus {
 }
 .dict-total {
     font-size: 13px;
-    color: #9aa0a6;
+    color: var(--text-muted);
 }
 .dict-total b {
-    color: #1981CA;
+    color: var(--accent-dark);
     font-weight: 600;
 }
 #reimportBtn {
@@ -992,16 +1145,16 @@ input[type="text"]:focus, input[type="search"]:focus {
     font-size: 13px;
     padding: 4px 14px;
     border-radius: 6px;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
     background: transparent;
-    color: #d9dce1;
+    color: var(--text-light-2);
     cursor: pointer;
     transition: background .2s, border-color .2s, color .2s;
 }
 #reimportBtn:hover {
-    background: #3a3c44;
-    border-color: #1981CA;
-    color: #fff;
+    background: var(--bg-main);
+    border-color: var(--accent-dark);
+    color: var(--white);
 }
 #reimportBtn:disabled {
     opacity: .5;
@@ -1011,32 +1164,32 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* 查看单词列表：拆分数量输入 + 拆分按钮 */
 .split-row {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     align-items: center;
-    margin: 0.4rem 0 0.6rem;
+    margin: 0.3rem 0 0.35rem;
 }
 
 /* 合并词表行 */
 .merge-row {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     align-items: center;
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.35rem;
 }
 .merge-row select {
     flex: 1 1 auto;
     min-width: 0;
     padding: 6px 10px;
     border-radius: 6px;
-    border: 1px solid #5a5c66;
-    background: #3a3c44;
-    color: #fff;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    color: var(--white);
     font-size: 14px;
 }
 .merge-row select:focus,
 #splitCount:focus {
     outline: none;
-    border-color: #1981CA;
+    border-color: var(--accent-dark);
 }
 .merge-row button {
     font-size: 0.85rem;
@@ -1046,31 +1199,31 @@ input[type="text"]:focus, input[type="search"]:focus {
 /* 拆分/合并：输入框与选择框高度宽度一致，按钮高度一致，上下居中 */
 #splitCount,
 #mergeSelect {
-    width: 170px;
-    flex: 0 0 170px;
+    width: 220px;
+    flex: 0 0 220px;
     height: 38px;
     box-sizing: border-box;
     padding: 6px 10px;
     font-size: 14px;
     vertical-align: middle;
     border-radius: 6px;
-    border: 1px solid #5a5c66;
-    background: #3a3c44;
-    color: #fff;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    color: var(--white);
 }
 .split-row button {
     font-size: 13px;
     padding: 6px 14px;
     border-radius: 6px;
-    border: 1px solid #1981CA;
+    border: 1px solid var(--accent-dark);
     background: transparent;
-    color: #d9dce1;
+    color: var(--text-light-2);
     cursor: pointer;
     transition: background .2s, color .2s;
 }
 .split-row button:hover {
-    background: #1981CA;
-    color: #fff;
+    background: var(--accent-dark);
+    color: var(--white);
 }
 #splitBtn,
 #mergeBtn {
@@ -1094,11 +1247,11 @@ input[type="text"]:focus, input[type="search"]:focus {
     top: 70px;
     left: 50%;
     transform: translateX(-50%) translateY(-16px);
-    background: #2b2d33;
-    color: #ffffff;
+    background: var(--bg-deep);
+    color: var(--white);
     padding: 11px 20px;
     border-radius: 8px;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
     font-size: 0.9rem;
     z-index: 99999;
     opacity: 0;
@@ -1109,53 +1262,53 @@ input[type="text"]:focus, input[type="search"]:focus {
     word-break: break-word;
     text-align: center;
     line-height: 1.6;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+    box-shadow: 0 6px 20px var(--overlay-40);
 }
 .app-toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
 .app-toast.success {
-    border-color: #67c23a;
-    color: #c9f2d2;
+    border-color: var(--success);
+    color: var(--success-soft);
 }
 .app-toast.error {
-    border-color: #f56c6c;
-    color: #ffd4d4;
+    border-color: var(--danger);
+    color: var(--danger-soft);
 }
 .app-toast.warning {
-    border-color: #e6a23c;
-    color: #ffe8bf;
+    border-color: var(--warning);
+    color: var(--warning-soft);
 }
 
 /* ---------- 自定义对话框（confirm / prompt） ---------- */
 .app-dialog-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--overlay-55);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 99998;
 }
 .app-dialog {
-    background: #2b2d33;
-    border: 1px solid #5a5c66;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 22px;
     min-width: 300px;
     max-width: 82vw;
-    box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+    box-shadow: 0 10px 34px var(--overlay-50);
 }
 .app-dialog-title {
     font-size: 1.05rem;
     font-weight: bold;
-    color: #ffffff;
+    color: var(--white);
     margin-bottom: 14px;
 }
 .app-dialog-msg {
     font-size: 0.9rem;
-    color: #d8d9dd;
+    color: var(--text-light);
     white-space: pre-wrap;
     word-break: break-word;
     margin-bottom: 18px;
@@ -1166,15 +1319,15 @@ input[type="text"]:focus, input[type="search"]:focus {
     box-sizing: border-box;
     padding: 9px 12px;
     border-radius: 6px;
-    border: 1px solid #5a5c66;
-    background: #3a3c44;
-    color: #ffffff;
+    border: 1px solid var(--border);
+    background: var(--bg-main);
+    color: var(--white);
     font-size: 14px;
     margin-bottom: 18px;
     outline: none;
 }
 .app-dialog input:focus {
-    border-color: #1981CA;
+    border-color: var(--accent-dark);
 }
 .app-dialog-btns {
     display: flex;
@@ -1190,12 +1343,12 @@ input[type="text"]:focus, input[type="search"]:focus {
     transition: filter .15s;
 }
 .app-dialog-btn.cancel {
-    background: #464850;
-    color: #d8d9dd;
+    background: var(--bg-panel);
+    color: var(--text-light);
 }
 .app-dialog-btn.ok {
-    background: #1981CA;
-    color: #ffffff;
+    background: var(--accent-dark);
+    color: var(--white);
 }
 .app-dialog-btn:hover {
     filter: brightness(1.15);
@@ -1209,17 +1362,17 @@ input.spell-input {
     padding: 10px 16px;
     font-size: clamp(18px, 4vw, 28px);
     text-align: center;
-    border: 1px solid #5a5c66;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background-color: #464850;
-    color: #ffffff;
+    background-color: var(--bg-panel);
+    color: var(--white);
     outline: none;
     margin: 16px auto 24px;
     display: block;
     box-sizing: border-box;
 }
 .spell-input:focus {
-    border-color: #1981CA;
+    border-color: var(--accent-dark);
 }
 
 /* ---------- 移动端适配 ---------- */
@@ -1236,7 +1389,7 @@ input.spell-input {
         width: 86vw;
     }
     .word-display {
-        min-height: 150px;
+        min-height: 190px;
     }
     .dict-word {
         font-size: 1.4rem;
@@ -1281,6 +1434,87 @@ input.spell-input {
 @media (hover: none) {
     .mainA1:hover {
         transform: none;
-        box-shadow: 0px 0px 10px 3px #30333cba;
+        box-shadow: 0px 0px 10px 3px var(--bg-overlay);
     }
+}
+
+/* ---------- 我的词表：词典管理 ---------- */
+.dict-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+.dict-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.dict-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.dict-name {
+    color: var(--white);
+    font-size: 15px;
+    font-weight: 500;
+}
+.dict-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.dict-status {
+    flex: 0 0 auto;
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background-color: var(--bg-deep);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
+}
+.dict-status.ok {
+    color: var(--success);
+    border-color: var(--success);
+    background-color: var(--success-soft);
+}
+.dict-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+}
+.dict-actions button {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    padding: 6px 18px;
+}
+.dict-actions button.primary {
+    background-color: var(--accent);
+}
+.dict-actions button.primary:hover:not(:disabled) {
+    background-color: var(--accent-dark);
+}
+.dict-actions button.danger {
+    background-color: var(--danger);
+}
+.dict-actions button.danger:hover:not(:disabled) {
+    background-color: var(--danger-2);
+}
+.dict-busy-tip {
+    display: none;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--highlight);
+    font-size: 13px;
+    text-align: center;
 }
