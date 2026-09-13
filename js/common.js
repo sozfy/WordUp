@@ -76,11 +76,15 @@ function flattenNewlines(text) {
 }
 
 // CSV 解析器（支持带引号字段），用于内置词典自动导入
-function parseCSV(text) {
+function parseCSV(text, onProgress) {
     const rows = [];
     let cur = [];
     let field = '';
     let inQuotes = false;
+    const total = text.length;
+    // 每约 50 万字符回调一次解析进度
+    const step = 500000;
+    let nextAt = step;
     for (let i = 0; i < text.length; i++) {
         const ch = text[i];
         if (inQuotes) {
@@ -94,6 +98,10 @@ function parseCSV(text) {
             else if (ch === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
             else if (ch === '\r') { /* ignore */ }
             else { field += ch; }
+        }
+        if (onProgress && i >= nextAt) {
+            nextAt += step;
+            onProgress(i / total);
         }
     }
     if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur); }
@@ -304,22 +312,43 @@ async function updateMemUsage() {
     el.title = 'localStorage 已用 ' + lsMB + 'MB；IndexedDB 已用 ' + idbMB + 'MB；剩余 ' + remainMB + 'MB（来源：navigator.storage.estimate）';
 }
 
-// ---------- 内置词典自动导入（首次启动时从 ecdict.csv 导入） ----------
-function showImportHint(text) {
+// ---------- 词典导入提示与进度条 ----------
+function showImportHint(text, pct) {
     let el = document.getElementById('autoImportHint');
     if (!el) {
         el = document.createElement('div');
         el.id = 'autoImportHint';
-        el.style.cssText = 'position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:9999;background:#3a3c44;border:1px solid #5a5c66;color:#fff;padding:10px 18px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.4);max-width:90%;text-align:center;font-size:14px;';
+        el.style.cssText = 'position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:9999;background:#3a3c44;border:1px solid #5a5c66;color:#fff;padding:10px 18px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.4);min-width:280px;text-align:center;font-size:14px;';
+        const txt = document.createElement('div');
+        txt.id = 'autoImportHintText';
+        const bar = document.createElement('div');
+        bar.id = 'autoImportBar';
+        bar.style.cssText = 'margin-top:8px;height:8px;background:#555760;border-radius:4px;overflow:hidden;';
+        const fill = document.createElement('div');
+        fill.id = 'autoImportBarFill';
+        fill.style.cssText = 'height:100%;width:0;background:linear-gradient(90deg,#4c8dff,#6aa8ff);border-radius:4px;transition:width .25s;';
+        bar.appendChild(fill);
+        el.appendChild(txt);
+        el.appendChild(bar);
         document.body.appendChild(el);
     }
-    el.textContent = text;
+    const txt = document.getElementById('autoImportHintText');
+    if (txt) txt.textContent = text;
+    if (typeof pct === 'number') {
+        const fill = document.getElementById('autoImportBarFill');
+        if (fill) fill.style.width = Math.max(0, Math.min(100, Math.round(pct))) + '%';
+    }
 }
 function hideImportHint() {
     const el = document.getElementById('autoImportHint');
     if (el) el.remove();
 }
 
+// 下载超时策略：获取响应头 60 秒绝对超时；流式读取 30 秒无新数据视为断流（停滞超时）
+// 慢但持续传输不会误杀，真正挂起/断流才会中止，避免永久卡在下载界面
+function createDownloadTimeout() {
+    return { ctrl: new AbortController() };
+}
 async function autoImportDictFromCSV() {
     if (window.dictAutoImporting || window.dictLoading) return;
     let loaded = false;
@@ -328,7 +357,7 @@ async function autoImportDictFromCSV() {
     if (window.dictData && window.dictData.size > 0) return;
 
     window.dictAutoImporting = true;
-    showImportHint('首次使用，正在导入内置词典（约需1-3分钟）...');
+    showImportHint('正在下载词典 0% ...', 0);
     try {
         // 词典来源：优先本地 data/ecdict.csv（自备），否则从 ECDICT GitHub 仓库在线获取
         const DICT_CSV_URLS = [
@@ -337,19 +366,86 @@ async function autoImportDictFromCSV() {
         ];
         let resp = null;
         for (const url of DICT_CSV_URLS) {
+            // 获取响应头：60 秒绝对超时
+            const ctrl = new AbortController();
+            const t1 = setTimeout(() => ctrl.abort(), 60000);
             try {
-                resp = await fetch(url);
+                resp = await fetch(url, { signal: ctrl.signal });
+                clearTimeout(t1);
                 if (resp.ok) break;
-            } catch (e) { resp = null; }
+            } catch (e) {
+                clearTimeout(t1);
+                console.warn('词典源不可用：' + url, e);
+                resp = null;
+            }
         }
         if (!resp || !resp.ok) {
             console.warn('未找到内置词典文件 ecdict.csv');
+            hideImportHint();
+            showToast('词典下载失败：无法获取词典文件，请检查网络后重试', 'error');
             return;
         }
-        showImportHint('正在读取词典文件...');
-        const text = await resp.text();
-        showImportHint('正在解析词典数据...');
-        const rows = parseCSV(text);
+
+        // 流式读取并实时显示下载进度与速度；停滞超时：30 秒无新数据视为断流，中止下载
+        let text;
+        if (resp.body && resp.body.getReader) {
+            const contentLength = parseInt(resp.headers.get('content-length'), 10) || 0;
+            const reader = resp.body.getReader();
+            const chunks = [];
+            let received = 0;
+            // 实时下载速度：滑动窗口（最近 3 秒收到的字节数）
+            const speedWindow = [];
+            const fmtSpeed = (bps) => {
+                if (bps >= 1048576) return (bps / 1048576).toFixed(1) + 'MB/s';
+                if (bps >= 1024) return Math.round(bps / 1024) + 'KB/s';
+                return Math.round(bps) + 'B/s';
+            };
+            let idleTimer = null;
+            const armIdle = () => {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => {
+                    try { resp.body.cancel('下载停滞'); } catch (e) {}
+                }, 30000);
+            };
+            armIdle();
+            try {
+                while (true) {
+                    const r = await reader.read();
+                    armIdle();
+                    if (r.done) break;
+                    if (r.value) {
+                        chunks.push(r.value);
+                        received += r.value.length;
+                        const now = performance.now();
+                        speedWindow.push({ t: now, bytes: r.value.length });
+                        while (speedWindow.length && now - speedWindow[0].t > 3000) speedWindow.shift();
+                        const winBytes = speedWindow.reduce((s, w) => s + w.bytes, 0);
+                        const winMs = Math.max(1, now - speedWindow[0].t);
+                        const speed = winBytes / winMs * 1000;
+                        if (contentLength > 0) {
+                            const pct = Math.max(0, Math.min(100, received / contentLength * 100));
+                            showImportHint('正在下载词典 ' + Math.round(pct) + '%（' + fmtSpeed(speed) + '）...', pct);
+                        } else {
+                            showImportHint('正在下载词典 ' + (received / 1048576).toFixed(1) + 'MB（' + fmtSpeed(speed) + '）...');
+                        }
+                    }
+                }
+            } finally {
+                clearTimeout(idleTimer);
+            }
+            const bytes = new Uint8Array(received);
+            let off = 0;
+            for (const c of chunks) { bytes.set(c, off); off += c.length; }
+            text = new TextDecoder().decode(bytes);
+        } else {
+            showImportHint('正在读取词典文件...');
+            text = await resp.text();
+        }
+
+        showImportHint('正在解析词典数据 0% ...', 0);
+        const rows = parseCSV(text, (ratio) => {
+            showImportHint('正在解析词典数据 ' + Math.round(ratio * 100) + '% ...', ratio * 100);
+        });
         if (rows.length < 2) { console.warn('词典 CSV 为空'); return; }
 
         const headers = rows[0].map(h => h.trim());
@@ -391,18 +487,20 @@ async function autoImportDictFromCSV() {
             }
             done += end - i;
             const pct = Math.round((done / total) * 100);
-            showImportHint('正在存储词典 ' + pct + '% ...');
+            showImportHint('正在存储词典 ' + pct + '% ...', pct);
             // 让出主线程，避免页面卡死
             await new Promise(r => setTimeout(r, 0));
         }
 
         showImportHint('词典导入完成');
         window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: done } }));
-        hideImportHint();
+        setTimeout(hideImportHint, 600);
         console.log('内置词典自动导入完成');
     } catch (e) {
         console.warn('内置词典自动导入失败', e);
         hideImportHint();
+        const abortMsg = (e && e.name === 'AbortError') ? '词典下载中断（网络停滞或超时），请检查网络后重试' : '词典下载失败：' + (e && e.message ? e.message : e);
+        showToast(abortMsg, 'error');
     } finally {
         window.dictAutoImporting = false;
     }
@@ -410,14 +508,23 @@ async function autoImportDictFromCSV() {
 
 // ---------- 页面初始化 ----------
 document.addEventListener('DOMContentLoaded', () => {
-    // 词典统一存于 IndexedDB：打开页面仅确保导入，不加载到内存；
-    // 查询（含搜索建议/前缀模糊）均直接从 IndexedDB 读取，避免全量加载占内存
-    // 管理页（我的词表）通过 window.disableAutoDictImport 关闭自动导入，由用户手动下载/删除
-    if (!window.disableAutoDictImport) autoImportDictFromCSV();
+    // 词典不再自动下载：仅检测是否已下载，未下载时提示用户前往「我的词表」下载
+    checkDictAvailability();
     // 显示存储用量（localStorage + IndexedDB + 剩余空间），每 5 秒刷新
     updateMemUsage();
     setInterval(updateMemUsage, 5000);
 });
+
+// 词典可用性提示：未下载任何词典时弹出提示（不自动下载）
+async function checkDictAvailability() {
+    if (window.disableAutoDictImport) return; // 管理页由用户手动下载/删除，不提示
+    let loaded = false;
+    try { loaded = await isDictLoaded(); } catch (e) {}
+    if (loaded) return;
+    setTimeout(() => {
+        showToast('词典尚未下载，可前往「我的词表」页面下载', 'warning');
+    }, 400);
+}
 
 
 // ================= 自定义 UI 提示组件（替代浏览器自带 alert/confirm/prompt） =================
@@ -490,4 +597,33 @@ function closeDialog() {
     const overlay = document.getElementById('appDialogOverlay');
     if (overlay) overlay.style.display = 'none';
     _dialogCb = null;
+}
+
+// ================= 清除缓存 =================
+// 删除 IndexedDB 中的全部数据（单词词表库 + 词典库），并防止刷新后词典被自动重新导入
+function clearAllCache() {
+    showConfirm('⚠️ 警告：将清除数据库中的所有数据，包括全部单词列表与词典，此操作无法恢复！确定继续吗？', () => {
+        const dbNames = [
+            typeof WORD_DB_NAME !== 'undefined' ? WORD_DB_NAME : 'WordMemorizerData',
+            DICT_DB_NAME
+        ];
+        (async () => {
+            try {
+                for (const name of dbNames) {
+                    await new Promise((resolve, reject) => {
+                        const req = indexedDB.deleteDatabase(name);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                        // 有其他页面/连接占用时，浏览器会在连接释放后自动完成删除，这里只需等待
+                        req.onblocked = () => {};
+                    });
+                }
+                showToast('已清除全部缓存，页面即将刷新', 'success');
+                setTimeout(() => location.reload(), 800);
+            } catch (err) {
+                console.error(err);
+                showToast('清除缓存失败：' + (err && err.message ? err.message : err), 'error');
+            }
+        })();
+    });
 }

@@ -911,7 +911,7 @@ async function addWords() {
     if (!customText) {
         const loaded = await isDictLoaded();
         if (!loaded) {
-            showToast('词典未导入，请先到"查单词"页面导入 ecdict.csv；或填写自定义释义', 'error');
+            showToast('词典未下载，请先到「我的词表」页面下载词典；或填写自定义释义', 'error');
             return;
         }
     }
