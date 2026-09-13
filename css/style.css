@@ -158,6 +158,26 @@ h1 {
     color: var(--white) !important;
 }
 
+/* 导航栏右侧：清除缓存按钮（红色文字） */
+.clear-cache-btn {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--danger);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.clear-cache-btn:hover {
+    background: var(--danger-soft);
+    color: var(--danger-2);
+}
+
 /* ---------- 浮动菜单按钮（独立于导航栏） ---------- */
 .floating-menu-btn {
     position: fixed;
