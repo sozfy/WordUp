@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=46">
+    <link rel="stylesheet" href="css/style.css?v=53">
 </head>
 <body>
     <!--导航栏-->
@@ -17,6 +17,7 @@
             <span class="banner-divider"></span>
             <a href="./WordMemorizer.html" class="nav-link">背单词</a>
             <a href="./DictLookup.html" class="nav-link">查单词</a>
+            <a href="./MyLists.html" class="nav-link">我的词表</a>
         </div>
     </header>
 
@@ -107,6 +108,10 @@
                     <span>单轮循环</span>
                     <input type="checkbox" class="onoff" id="roundBtn" onclick="applyRound()">
                 </div>
+                <div class="setting-row">
+                    <span>随机种子</span>
+                    <span id="seedValue" class="seed-value">-</span>
+                </div>
             </div>
         </div>
     </div>
@@ -157,8 +162,9 @@
                 <button class="modal-close" onclick="closeModal('addModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
-                <p class="tip">每行输入一个英文单词，释义自动从本地词典获取</p>
+                <p class="tip">每行输入一个英文单词。释义可选：留空则自动从本地词典获取，填写则为自定义释义</p>
                 <textarea id="wordInput" placeholder="例如：apple&#10;banana&#10;book"></textarea>
+                <textarea id="customMeaningInput" placeholder="自定义释义（可选）：填写后本批单词使用此释义，不依赖词典"></textarea>
                 <div style="display: flex; gap: 8px; width: 100%;">
                     <button onclick="addWords()">添加单词</button>
                     <button class="danger" onclick="clearAllWords()">清空当前词表</button>
@@ -183,6 +189,9 @@
                 <div class="merge-row">
                     <select id="mergeSelect" title="选择要合并的词表（合并后该词表会被删除）"></select>
                     <button id="mergeBtn" onclick="mergeList()">合并</button>
+                </div>
+                <div class="word-search-row">
+                    <input type="text" id="wordListSearch" placeholder="搜索单词或释义" oninput="onWordListSearch()">
                 </div>
                 <div class="word-list" id="wordListDisplay">暂无单词</div>
             </div>
@@ -231,7 +240,7 @@
         </div>
     </main>
 
-    <script src="js/common.js?v=5"></script>
+    <script src="js/common.js?v=7"></script>
     <script src="data/preset_zk.js"></script>
     <script src="data/preset_gk.js"></script>
     <script src="data/preset_cet4.js"></script>
@@ -240,8 +249,8 @@
     <script src="data/preset_ielts.js"></script>
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
-    <script src="data/preset_data.js?v=2"></script>
-    <script src="js/script.js?v=10"></script>
+    <script src="data/preset_data.js?v=3"></script>
+    <script src="js/script.js?v=13"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
