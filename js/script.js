@@ -66,56 +66,23 @@ const WORD_DB_VERSION = 1;
 const WORD_DB_KEY = 'main';
 
 function openWordDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(WORD_DB_NAME, WORD_DB_VERSION);
-        req.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains(WORD_DB_STORE)) {
-                db.createObjectStore(WORD_DB_STORE); // 无 keyPath，用 put(value, key)
-            }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+    return openIndexedDB(WORD_DB_NAME, WORD_DB_VERSION, (db) => {
+        if (!db.objectStoreNames.contains(WORD_DB_STORE)) {
+            db.createObjectStore(WORD_DB_STORE); // 无 keyPath，用 put(value, key)
+        }
     });
 }
 
-// 读取单词数据；首次运行时自动从旧版 localStorage 迁移
+// 读取单词数据（无旧版，仅从 IndexedDB 读取）
 async function loadWordData() {
     try {
         const db = await openWordDB();
-        const stored = await new Promise((resolve) => {
+        return await new Promise((resolve) => {
             const tx = db.transaction(WORD_DB_STORE, 'readonly');
             const req = tx.objectStore(WORD_DB_STORE).get(WORD_DB_KEY);
             req.onsuccess = () => resolve(req.result || null);
             req.onerror = () => resolve(null);
         });
-        if (stored) return stored;
-
-        // 无 IndexedDB 数据：尝试从旧版 localStorage 迁移 wordData
-        try {
-            const raw = localStorage.getItem('wordData');
-            if (raw) {
-                let legacy = JSON.parse(raw);
-                // 数据迁移：旧格式 { allWords, pendingWords, selectedWord }
-                if (legacy.allWords !== undefined && !legacy.lists) {
-                    const migratedList = {
-                        id: genListId(),
-                        name: '我的单词',
-                        words: legacy.allWords || [],
-                        pendingWords: legacy.pendingWords || [],
-                        selectedWord: legacy.selectedWord || null
-                    };
-                    legacy = { activeListId: migratedList.id, lists: [migratedList] };
-                }
-                const ok = await writeWordData(legacy);
-                if (ok) {
-                    try { localStorage.removeItem('wordData'); } catch (e) {} // 迁移成功后再清除旧数据
-                }
-                return legacy;
-            }
-        } catch (e) { /* localStorage 数据损坏则忽略 */ }
-
-        return null; // 无历史数据
     } catch (e) {
         return null;
     }
@@ -164,31 +131,24 @@ async function loadAllMeanings() {
     });
     if (allWords.size === 0) return;
     const entries = await lookupWords(Array.from(allWords));
-    _wordDataCache.lists.forEach(list => {
-        (list.words || []).forEach(w => {
-            const e = entries.get(w.word.toLowerCase());
-            if (e) {
-                w.meaning = normalizeNewlines(e.translation || e.definition || '(无释义)');
-            } else if (!w.meaning) {
-                w.meaning = '(无释义)';
-            }
-        });
-        (list.pendingWords || []).forEach(w => {
-            const e = entries.get(w.word.toLowerCase());
-            if (e) {
-                w.meaning = normalizeNewlines(e.translation || e.definition || '(无释义)');
-            } else if (!w.meaning) {
-                w.meaning = '(无释义)';
-            }
-        });
-        if (list.selectedWord) {
-            const e = entries.get(list.selectedWord.word.toLowerCase());
-            if (e) {
-                list.selectedWord.meaning = normalizeNewlines(e.translation || e.definition || '(无释义)');
-            } else if (!list.selectedWord.meaning) {
-                list.selectedWord.meaning = '(无释义)';
-            }
+    // 给内存中的单词对象填充 meaning：有自定义释义(customMeaning)优先，否则链接词典查询
+    const apply = (w) => {
+        if (!w) return;
+        if (w.customMeaning) {
+            w.meaning = normalizeNewlines(w.customMeaning);
+            return;
         }
+        const e = entries.get(w.word.toLowerCase());
+        if (e) {
+            w.meaning = normalizeNewlines(e.translation || e.definition || '(无释义)');
+        } else if (!w.meaning) {
+            w.meaning = '(无释义)';
+        }
+    };
+    _wordDataCache.lists.forEach(list => {
+        (list.words || []).forEach(apply);
+        (list.pendingWords || []).forEach(apply);
+        apply(list.selectedWord);
     });
     // 释义加载完成后刷新 UI
     renderSidebarLists();
@@ -372,18 +332,22 @@ function viewListWords(id) {
     refreshMergeSelect();
 }
 
+let _listDragFrom = -1;
+
 function renderSidebarLists() {
     const data = getWordData();
     const container = document.getElementById('sidebarLists');
     let html = '';
-    data.lists.forEach(list => {
+    data.lists.forEach((list, index) => {
         const isActive = list.id === data.activeListId;
-        html += '<div class="sidebar-list-item' + (isActive ? ' active' : '') + '">';
+        html += '<div class="sidebar-list-item' + (isActive ? ' active' : '') + '" draggable="true" data-index="' + index + '" ' +
+            'ondragstart="listDragStart(event)" ondragover="listDragOver(event)" ' +
+            'ondrop="listDrop(event)" ondragend="listDragEnd(event)">';
         html += '  <div class="list-item-info" onclick="switchList(\'' + list.id + '\')">';
         html += '    <span class="list-item-name">' + escapeHtml(list.name) + '</span>';
         html += '    <span class="list-item-count">' + list.words.length + ' 词</span>';
         html += '  </div>';
-        html += '  <div class="list-item-actions">';
+        html += '  <div class="list-item-actions" draggable="false">';
         html += '    <button class="list-action-btn" title="查看单词" onclick="viewListWords(\'' + list.id + '\')">';
         html += '      <svg viewBox="0 0 1024 1024" width="16" height="16" fill="currentColor"><path d="M512 256c-141.4 0-260.8 82.2-320 200.5C251.2 574.2 370.6 656 512 656s260.8-82.2 320-200.5C772.8 338.2 653.4 256 512 256zm0 320c-66.3 0-120-53.7-120-120s53.7-120 120-120 120 53.7 120 120-53.7 120-120 120z"/></svg>';
         html += '    </button>';
@@ -399,6 +363,52 @@ function renderSidebarLists() {
     container.innerHTML = html;
 }
 
+function listDragStart(e) {
+    const item = e.target.closest('.sidebar-list-item');
+    if (!item) return;
+    _listDragFrom = parseInt(item.getAttribute('data-index'), 10);
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(_listDragFrom)); } catch (err) {}
+}
+
+function listDragOver(e) {
+    e.preventDefault();
+    const item = e.target.closest('.sidebar-list-item');
+    if (!item) return;
+    e.dataTransfer.dropEffect = 'move';
+    const rect = item.getBoundingClientRect();
+    const before = (e.clientY - rect.top) < rect.height / 2;
+    item.classList.remove('drag-over-before', 'drag-over-after');
+    item.classList.add(before ? 'drag-over-before' : 'drag-over-after');
+}
+
+function listDrop(e) {
+    e.preventDefault();
+    const target = e.target.closest('.sidebar-list-item');
+    if (!target) return;
+    const toIndex = parseInt(target.getAttribute('data-index'), 10);
+    const fromIndex = _listDragFrom;
+    _listDragFrom = -1;
+    if (fromIndex < 0 || fromIndex === toIndex) return;
+    const data = getWordData();
+    const arr = data.lists;
+    if (fromIndex >= arr.length || toIndex >= arr.length) return;
+    const [moved] = arr.splice(fromIndex, 1);
+    arr.splice(toIndex, 0, moved);
+    saveWordData(data);
+    renderSidebarLists();
+}
+
+function listDragEnd(e) {
+    const item = e.target.closest('.sidebar-list-item');
+    if (item) item.classList.remove('dragging');
+    document.querySelectorAll('#sidebarLists .sidebar-list-item').forEach(el => {
+        el.classList.remove('drag-over-before', 'drag-over-after');
+    });
+    _listDragFrom = -1;
+}
+
 function updateActiveListName() {
     const list = getActiveList();
     const name = list ? list.name : '无';
@@ -411,6 +421,29 @@ function updateActiveListName() {
 function updateRemainCount() {
     const list = getActiveList();
     document.getElementById('remainCount').textContent = '待抽取个数：' + list.pendingWords.length;
+}
+
+// ---------- 可播种随机：种子 = 当前时间（YYYYMMDDHHMMSS），用于随机抽词/选项 ----------
+let _rng = Math.random;
+let _seedStr = '';
+function mulberry32(a) {
+    return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+function _pad2(n) { return (n < 10 ? '0' : '') + n; }
+// 用当前时间（精确到秒）生成种子并重置随机数发生器
+function initRandomSeed() {
+    const now = new Date();
+    _seedStr = '' + now.getFullYear() + _pad2(now.getMonth() + 1) + _pad2(now.getDate()) +
+        _pad2(now.getHours()) + _pad2(now.getMinutes()) + _pad2(now.getSeconds());
+    _rng = mulberry32(parseInt(_seedStr, 10));
+    const el = document.getElementById('seedValue');
+    if (el) el.textContent = _seedStr;
+    return _seedStr;
 }
 
 // ---------- 选项设置：个数（3~6）与详细释义 ----------
@@ -506,6 +539,14 @@ function updateDraw() {
 }
 
 // ---------- 单词列表渲染 ----------
+let _wordListSearch = '';             // 单词列表弹窗搜索关键词
+const _meaningLoadingSet = new Set(); // 正在异步补查释义的单词（去重）
+
+// 将单词转为可安全嵌入 onclick 的 JS 单引号字符串字面量
+function jsQuoteStr(s) {
+    return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+}
+
 function renderWordList(wordArray) {
     const displayEl = document.getElementById('wordListDisplay');
     const countEl = document.getElementById('wordCount');
@@ -513,18 +554,104 @@ function renderWordList(wordArray) {
     // 按字典顺序排列显示（复制排序，不改变存储顺序）
     const sorted = wordArray.slice().sort((a, b) => a.word.toLowerCase().localeCompare(b.word.toLowerCase()));
 
-    countEl.textContent = '单词总数：' + sorted.length;
+    // 搜索过滤：匹配单词或释义
+    const kw = _wordListSearch.trim().toLowerCase();
+    let filtered = sorted;
+    if (kw) {
+        filtered = sorted.filter(item =>
+            item.word.toLowerCase().includes(kw) ||
+            (item.meaning || item.customMeaning || '').toLowerCase().includes(kw)
+        );
+    }
+
+    countEl.textContent = '单词总数：' + sorted.length + (kw ? '，筛选出 ' + filtered.length + ' 个' : '');
 
     if (sorted.length === 0) {
         displayEl.innerHTML = '<div class="word-item">暂无单词</div>';
         return;
     }
+    if (filtered.length === 0) {
+        displayEl.innerHTML = '<div class="word-item">没有匹配的单词</div>';
+        return;
+    }
 
     let html = '';
-    sorted.forEach((item, index) => {
-        html += '<div class="word-item">' + (index + 1) + '. ' + escapeHtml(item.word) + ' —— ' + escapeHtml(normalizeNewlines(item.meaning)) + '</div>';
+    filtered.forEach((item, index) => {
+        const meaning = item.meaning || (item.customMeaning ? normalizeNewlines(item.customMeaning) : '');
+        html += '<div class="word-item">';
+        html += '  <div class="word-item-text">';
+        html += '    <span class="word-item-index">' + (index + 1) + '.</span>';
+        html += '    <span class="word-item-word">' + escapeHtml(item.word) + '</span>';
+        if (meaning) {
+            html += '    <span class="word-item-mean">—— ' + escapeHtml(meaning) + '</span>';
+        } else {
+            html += '    <span class="word-item-mean word-item-mean-loading">（释义加载中...）</span>';
+        }
+        html += '  </div>';
+        html += '  <button class="word-item-del" title="删除单词" onclick="deleteWordFromList(' + jsQuoteStr(item.word) + ')">';
+        html += '    <svg viewBox="0 0 1024 1024" width="13" height="13" fill="currentColor"><path d="M563.8 512l262.5-312.9c4.4-5.2.7-13.1-6.1-13.1h-79.8c-4.7 0-9.2 2.1-12.3 5.7L511.6 449.8 295.1 191.7c-3-3.6-7.5-5.7-12.3-5.7H203c-6.8 0-10.5 7.9-6.1 13.1L459.4 512 196.9 824.9c-4.4 5.2-.7 13.1 6.1 13.1h79.8c4.7 0 9.2-2.1 12.3-5.7l216.5-258.1 216.5 258.1c3 3.6 7.5 5.7 12.3 5.7h79.8c6.8 0 10.5-7.9 6.1-13.1L563.8 512z"/></svg>';
+        html += '  </button>';
+        html += '</div>';
     });
     displayEl.innerHTML = html;
+
+    // 补查缺失释义（词典链接单词，异步查询后刷新）
+    ensureWordMeanings(sorted);
+}
+
+// 异步补查缺失释义：仅处理无 meaning 且无自定义释义的单词，完成后若弹窗仍打开则刷新
+async function ensureWordMeanings(wordArray) {
+    const missing = [];
+    wordArray.forEach(item => {
+        if (!item.meaning && !item.customMeaning && !_meaningLoadingSet.has(item.word.toLowerCase())) {
+            _meaningLoadingSet.add(item.word.toLowerCase());
+            missing.push(item);
+        }
+    });
+    if (missing.length === 0) return;
+    let entries;
+    try {
+        entries = await lookupWords(missing.map(m => m.word));
+    } catch (err) {
+        entries = new Map();
+    }
+    missing.forEach(item => {
+        _meaningLoadingSet.delete(item.word.toLowerCase());
+        const e = entries.get(item.word.toLowerCase());
+        item.meaning = e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)';
+    });
+    const modal = document.getElementById('listModal');
+    if (modal && modal.classList.contains('visible')) {
+        renderWordList(getActiveList().words);
+    }
+}
+
+// 单词列表弹窗搜索
+function onWordListSearch() {
+    _wordListSearch = document.getElementById('wordListSearch').value;
+    renderWordList(getActiveList().words);
+}
+
+// 从当前词表删除单个单词（同步清理待抽取/选中/循环判定记录）
+function deleteWordFromList(word) {
+    const data = getWordData();
+    const list = getActiveList(data);
+    const lower = word.toLowerCase();
+    const target = list.words.find(w => w.word.toLowerCase() === lower);
+    if (!target) return;
+    showConfirm('确定要从「' + list.name + '」中删除单词「' + target.word + '」吗？', () => {
+        list.words = list.words.filter(w => w.word.toLowerCase() !== lower);
+        list.pendingWords = list.pendingWords.filter(w => w.word.toLowerCase() !== lower);
+        if (list.selectedWord && list.selectedWord.word.toLowerCase() === lower) list.selectedWord = null;
+        if (Array.isArray(list.roundKnown)) list.roundKnown = list.roundKnown.filter(w => String(w).toLowerCase() !== lower);
+        if (Array.isArray(list.roundUnknown)) list.roundUnknown = list.roundUnknown.filter(w => String(w).toLowerCase() !== lower);
+        saveWordData(data);
+        renderSidebarLists();
+        refreshCurrentList();
+        updateDraw();
+        updateRemainCount();
+        showToast('已删除单词「' + target.word + '」', 'success');
+    });
 }
 
 function refreshCurrentList() {
@@ -581,11 +708,11 @@ function createOptions() {
         document.getElementById('optionDiv').classList.remove('hidden');
     }
 
-    const rightPos = Math.floor(Math.random() * count);
+    const rightPos = Math.floor(_rng() * count);
 
     const wrong = [];
     while (wrong.length < count - 1) {
-        const candidate = list.words[Math.floor(Math.random() * list.words.length)];
+        const candidate = list.words[Math.floor(_rng() * list.words.length)];
         if (candidate.word !== list.selectedWord.word && !wrong.includes(candidate)) {
             wrong.push(candidate);
         }
@@ -716,7 +843,7 @@ function drawWord(num) {
     }
 
     // ---- 抽新词 ----
-    const randomIndex = Math.floor(Math.random() * list.pendingWords.length);
+    const randomIndex = Math.floor(_rng() * list.pendingWords.length);
     list.selectedWord = list.pendingWords.splice(randomIndex, 1)[0];
     saveWordData(data);
 
@@ -777,10 +904,16 @@ async function addWords() {
         return;
     }
 
-    const loaded = await isDictLoaded();
-    if (!loaded) {
-        showToast('词典未导入，请先到"查单词"页面导入 ecdict.csv', 'error');
-        return;
+    const customEl = document.getElementById('customMeaningInput');
+    const customText = customEl ? customEl.value.trim() : '';
+
+    // 无自定义释义时才需要词典
+    if (!customText) {
+        const loaded = await isDictLoaded();
+        if (!loaded) {
+            showToast('词典未导入，请先到"查单词"页面导入 ecdict.csv；或填写自定义释义', 'error');
+            return;
+        }
     }
 
     const lines = input.split('\n').map(l => l.trim()).filter(l => l);
@@ -790,28 +923,30 @@ async function addWords() {
     }
 
     try {
-        const result = await lookupWords(lines);
+        const result = customText ? null : await lookupWords(lines);
         const data = getWordData();
         const list = getActiveList(data);
         let addedCount = 0;
         const notFound = [];
 
         lines.forEach(w => {
-            const entry = result.get(w.toLowerCase());
-            if (entry) {
-                const wordObj = {
-                    word: entry.word,
-                    meaning: normalizeNewlines(entry.translation || entry.definition || '(无释义)'),
-                    mnemonic: null
-                };
-                const isExist = list.words.some(item => item.word.toLowerCase() === wordObj.word.toLowerCase());
-                if (!isExist) {
-                    list.words.push(wordObj);
-                    list.pendingWords.push(wordObj);
-                    addedCount++;
-                }
+            let wordObj;
+            if (customText) {
+                // 自定义意思：释义直接持久化，不依赖词典
+                wordObj = { word: w, mnemonic: null, customMeaning: normalizeNewlines(customText) };
+                wordObj.meaning = wordObj.customMeaning;
             } else {
-                notFound.push(w);
+                // 词典链接：只存 word，释义运行时从词典库查询
+                const entry = result.get(w.toLowerCase());
+                if (!entry) { notFound.push(w); return; }
+                wordObj = { word: entry.word, mnemonic: null };
+                wordObj.meaning = normalizeNewlines(entry.translation || entry.definition || '(无释义)');
+            }
+            const isExist = list.words.some(item => item.word.toLowerCase() === wordObj.word.toLowerCase());
+            if (!isExist) {
+                list.words.push(wordObj);
+                list.pendingWords.push(wordObj);
+                addedCount++;
             }
         });
 
@@ -820,8 +955,9 @@ async function addWords() {
 
         saveWordData(data);
         document.getElementById('wordInput').value = '';
+        if (customEl) customEl.value = '';
 
-        let msg = '成功添加' + addedCount + '个新单词';
+        let msg = '成功添加' + addedCount + '个新单词' + (customText ? '（自定义释义）' : '');
         if (notFound.length > 0) {
             msg += '\n以下单词未在词典中找到：\n' + notFound.join(', ');
         }
@@ -1061,7 +1197,7 @@ function splitWords() {
     const pool = list.words.slice();
     const picked = [];
     for (let i = 0; i < n; i++) {
-        picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        picked.push(pool.splice(Math.floor(_rng() * pool.length), 1)[0]);
     }
     const pickedSet = new Set(picked.map(w => w.word.toLowerCase()));
 
@@ -1147,6 +1283,7 @@ function applyResetDraw() {
 
 function resetDraw() {
     showConfirm('确定要重置抽取记录吗？待抽取将重置为全部单词', () => {
+        initRandomSeed(); // 重置为新会话，种子更新为当前时间
         applyResetDraw();
         showToast('抽取记录已重置完成', 'success');
     });
@@ -1168,6 +1305,9 @@ function clearAllWords() {
         document.getElementById('currentMeaning').classList.add('hidden');
         list.lastJudged = null;
         document.getElementById('lastWord').textContent = '上一个单词';
+        _wordListSearch = '';
+        const wlSearch = document.getElementById('wordListSearch');
+        if (wlSearch) wlSearch.value = '';
         document.getElementById('wordListDisplay').innerHTML = '<div class="word-item">暂无单词</div>';
         document.getElementById('wordCount').textContent = '单词总数：0';
         document.getElementById('startButton').disabled = false;
@@ -1185,6 +1325,7 @@ function clearAllWords() {
     if (!document.getElementById('remainCount')) return;
 
     await initStorage();
+    initRandomSeed(); // 种子 = 当前时间（YYYYMMDDHHMMSS）
     renderSidebarLists();
     refreshCurrentList();
     updateDraw();

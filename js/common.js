@@ -103,19 +103,36 @@ function parseCSV(text) {
 // ---------- IndexedDB 词典 ----------
 const DICT_DB_NAME = 'WordMemorizerDict';
 const DICT_STORE_WORDS = 'words';
-const DICT_DB_VERSION = 2;
+const DICT_DB_VERSION = 1;
+
+// 通用打开数据库：若浏览器中残留更高版本的旧库（VersionError），视为无旧版，删除后按当前版本重建
+function openIndexedDB(name, version, onUpgrade) {
+    return new Promise((resolve, reject) => {
+        const attempt = () => {
+            const req = indexedDB.open(name, version);
+            req.onupgradeneeded = (e) => { if (onUpgrade) onUpgrade(e.target.result); };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => {
+                const err = e.target.error;
+                if (err && err.name === 'VersionError') {
+                    const del = indexedDB.deleteDatabase(name);
+                    del.onsuccess = () => attempt();
+                    del.onerror = () => reject(del.error);
+                    del.onblocked = () => reject(del.error || new Error(name + ' 旧库删除被阻塞'));
+                } else {
+                    reject(err);
+                }
+            };
+        };
+        attempt();
+    });
+}
 
 function openDictDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DICT_DB_NAME, DICT_DB_VERSION);
-        req.onupgradeneeded = (e) => {
-            const db = e.target.result;
-            if (!db.objectStoreNames.contains(DICT_STORE_WORDS)) {
-                db.createObjectStore(DICT_STORE_WORDS, { keyPath: 'word' });
-            }
-        };
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = (e) => reject(e.target.error);
+    return openIndexedDB(DICT_DB_NAME, DICT_DB_VERSION, (db) => {
+        if (!db.objectStoreNames.contains(DICT_STORE_WORDS)) {
+            db.createObjectStore(DICT_STORE_WORDS, { keyPath: 'word' });
+        }
     });
 }
 
@@ -395,7 +412,8 @@ async function autoImportDictFromCSV() {
 document.addEventListener('DOMContentLoaded', () => {
     // 词典统一存于 IndexedDB：打开页面仅确保导入，不加载到内存；
     // 查询（含搜索建议/前缀模糊）均直接从 IndexedDB 读取，避免全量加载占内存
-    autoImportDictFromCSV();
+    // 管理页（我的词表）通过 window.disableAutoDictImport 关闭自动导入，由用户手动下载/删除
+    if (!window.disableAutoDictImport) autoImportDictFromCSV();
     // 显示存储用量（localStorage + IndexedDB + 剩余空间），每 5 秒刷新
     updateMemUsage();
     setInterval(updateMemUsage, 5000);
