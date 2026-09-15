@@ -1,63 +1,80 @@
 // ========== 词典查询逻辑 ==========
-// 词典由 common.js 统一导入并存于 IndexedDB，本页直接查询数据库，不加载全量到内存
-let _dictReady = false; // 词典是否已导入（从 IndexedDB 统计判断）
+// 词典由 common.js 统一导入并按词典独立存于 IndexedDB（WordMemorizerDict_<id>），
+// 本页通过下拉框选择要查询的词典，查询直接读对应数据库，不加载全量到内存
+let _dictReady = false;          // 当前所选词典是否已导入
+let _currentDictId = '';         // 当前选中的词典 id（'' = 未选择，默认"请选择词典"）
 
 // ---------- UI 更新 ----------
 function setDictStatus(text) {
     const el = document.getElementById('dictStatus');
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    // 未选择词典（请选择词典）时不显示状态小字
+    el.style.display = (text === '请选择词典') ? 'none' : '';
 }
 
-// ---------- 词典已加载状态文案：共 实际/应有 个单词 ----------
-function getDictLoadedText(actual) {
-    const expectedEl = document.getElementById('dictExpectedCount');
-    const expected = expectedEl ? expectedEl.textContent : '';
-    return '词典已加载，共 ' + Number(actual).toLocaleString('en-US') + '/' + expected + ' 个单词';
-}
-
-// ---------- 重新导入词典 ----------
-async function reimportDict() {
-    showConfirm('重新导入将清空当前词典数据并重新下载（约需1-3分钟），是否继续？', async () => {
-        const btn = document.getElementById('reimportBtn');
+// ---------- 刷新当前词典状态（请选择词典 / 加载中... / 已加载 / 未下载） ----------
+async function refreshStatus() {
+    // 未选择词典
+    if (!_currentDictId) {
+        _dictReady = false;
+        setDictStatus('请选择词典');
         const searchBtn = document.getElementById('searchBtn');
-        if (btn) btn.disabled = true;
-        setDictStatus('正在清空旧词典...');
-        try {
-            const db = await openDictDB();
-            await new Promise((resolve, reject) => {
-                const tx = db.transaction(DICT_STORE_WORDS, 'readwrite');
-                tx.objectStore(DICT_STORE_WORDS).clear();
-                tx.oncomplete = () => resolve();
-                tx.onerror = (e) => reject(e.target.error);
-            });
-            // 重置内存状态，强制重新导入
-            window.dictLoaded = false;
-            window.dictData = null;
-            window.dictLoading = false;
-            window.dictAutoImporting = false;
-            if (searchBtn) searchBtn.disabled = true;
-            await autoImportDictFromCSV();
-            // 更新状态（直接从 IndexedDB 统计）
-            const cnt = await countDictEntries();
-            if (cnt > 0) {
-                _dictReady = true;
-                setDictStatus(getDictLoadedText(cnt));
-                if (searchBtn) searchBtn.disabled = false;
-            } else {
-                _dictReady = false;
-                setDictStatus('词典未加载');
-            }
-        } catch (e) {
-            console.error('重新导入失败', e);
-            showToast('重新导入失败：' + e.message, 'error');
-            setDictStatus('词典未加载');
-        } finally {
-            if (btn) btn.disabled = false;
-        }
-    });
+        if (searchBtn) searchBtn.disabled = true;
+        return;
+    }
+    // 导入进行中：显示"加载中..."
+    if (window.dictAutoImporting || window.dictLoading) {
+        _dictReady = false;
+        setDictStatus('加载中...');
+        const searchBtn = document.getElementById('searchBtn');
+        if (searchBtn) searchBtn.disabled = true;
+        return;
+    }
+    const count = await countDictEntries(_currentDictId);
+    const searchBtn = document.getElementById('searchBtn');
+    if (count > 0) {
+        _dictReady = true;
+        setDictStatus('已加载');
+        if (searchBtn) searchBtn.disabled = false;
+    } else {
+        _dictReady = false;
+        setDictStatus('未下载');
+        if (searchBtn) searchBtn.disabled = true;
+    }
 }
 
-// ---------- 查询单词 ----------
+// ---------- 渲染词典下拉框（默认"请选择词典"） ----------
+function renderDictSelect() {
+    const sel = document.getElementById('dictSelect');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">请选择词典</option>' + DICT_CATALOG.map(d =>
+        '<option value="' + d.id + '">' + escapeHtml(d.name) + '</option>'
+    ).join('');
+    sel.value = _currentDictId;
+}
+
+// ---------- 切换词典 ----------
+function onDictSelect() {
+    const sel = document.getElementById('dictSelect');
+    if (sel) _currentDictId = sel.value;
+    // 清空结果与建议，立即显示"加载中..."，再异步刷新所选词典状态
+    const resultEl = document.getElementById('dictResult');
+    if (resultEl) resultEl.innerHTML = '<div class="dict-empty">输入单词进行查询</div>';
+    const suggestions = document.getElementById('suggestions');
+    if (suggestions) suggestions.classList.add('hidden');
+    if (_currentDictId) {
+        _dictReady = false;
+        setDictStatus('加载中...');
+        const searchBtn = document.getElementById('searchBtn');
+        if (searchBtn) searchBtn.disabled = true;
+        refreshStatus();
+    } else {
+        refreshStatus();
+    }
+}
+
+// ---------- 查询单词（按当前所选词典） ----------
 async function searchWord() {
     const input = document.getElementById('searchInput');
     const word = input.value.trim().toLowerCase();
@@ -71,18 +88,23 @@ async function searchWord() {
         return;
     }
 
-    if (!_dictReady) {
-        resultEl.innerHTML = '<div class="dict-empty">词典正在加载，请稍候再试</div>';
+    if (!_currentDictId) {
+        resultEl.innerHTML = '<div class="dict-empty">请先在下拉框选择要查询的词典</div>';
         return;
     }
 
-    // 直接从 IndexedDB 查询（不依赖内存全量词典）
-    const entry = await lookupWord(word);
+    if (!_dictReady) {
+        resultEl.innerHTML = '<div class="dict-empty">当前词典尚未下载，请到「我的词典」页面下载后查询</div>';
+        return;
+    }
+
+    // 直接从当前词典的 IndexedDB 查询
+    const entry = await lookupWord(word, _currentDictId);
     if (entry) {
         renderResult(entry);
     } else {
         // 尝试模糊匹配（前缀），按词频排序，词频高优先，跳过词频为0的
-        const matches = await searchDictPrefix(word, 10);
+        const matches = await searchDictPrefix(word, 10, _currentDictId);
         if (matches.length > 0) {
             let html = `<div class="dict-empty">未找到 "${escapeHtml(word)}"，您是不是想找：</div><div style="margin-top:0.5rem;">`;
             matches.forEach(m => {
@@ -166,7 +188,7 @@ function setupSuggestions() {
         // 防抖：避免每次击键都触发数据库查询
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
-            const matches = await searchDictPrefix(val, 8);
+            const matches = await searchDictPrefix(val, 8, _currentDictId);
             const topKeys = matches.map(m => m.word);
 
             if (topKeys.length > 0) {
@@ -190,6 +212,7 @@ function setupSuggestions() {
 
 // ---------- 页面初始化 ----------
 window.addEventListener('DOMContentLoaded', async () => {
+    renderDictSelect();
     setupSuggestions();
 
     // 事件委托：点击带 data-word 的候选词时填入并查询
@@ -204,19 +227,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // 词典存储于 IndexedDB，页面打开时同步状态（统计词条数）
-    async function refreshStatus() {
-        const count = await countDictEntries();
-        if (count > 0) {
-            _dictReady = true;
-            setDictStatus(getDictLoadedText(count));
-            const btn = document.getElementById('searchBtn');
-            if (btn) btn.disabled = false;
-        } else {
-            _dictReady = false;
-            setDictStatus('词典未加载');
-        }
-    }
     await refreshStatus();
     // 导入完成事件后刷新状态
     window.addEventListener('dictReady', refreshStatus);

@@ -108,10 +108,35 @@ function parseCSV(text, onProgress) {
     return rows;
 }
 
-// ---------- IndexedDB 词典 ----------
-const DICT_DB_NAME = 'WordMemorizerDict';
+// ---------- 词典目录与 IndexedDB ----------
+const DICT_DB_PREFIX = 'WordMemorizerDict_';
 const DICT_STORE_WORDS = 'words';
 const DICT_DB_VERSION = 1;
+
+// 词典目录：在此扩展多本词典（id 唯一；urls 为下载源，按顺序尝试；expectedCount 用于状态显示）
+// 每本词典独立数据库：WordMemorizerDict_<id>
+const DICT_CATALOG = [
+    {
+        id: 'ecdict',
+        name: 'ECDICT 英汉词典',
+        desc: 'ECDICT 开源英汉词典：音标 / 释义 / 词性 / 词频 / 同根词等',
+        expectedCount: '770,611',
+        // 该词典可用的预设词表 tag（见 data/preset_*.js）
+        presets: ['zk', 'gk', 'cet4', 'cet6', 'ky', 'ielts', 'toefl', 'gre'],
+        urls: [
+            'data/ecdict.csv',
+            'https://ghproxy.net/https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv',
+            'https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv'
+        ]
+    }
+];
+
+function getDictById(id) {
+    return DICT_CATALOG.find(d => d.id === id) || DICT_CATALOG[0];
+}
+function dictDBName(id) {
+    return DICT_DB_PREFIX + id;
+}
 
 // 通用打开数据库：若浏览器中残留更高版本的旧库（VersionError），视为无旧版，删除后按当前版本重建
 function openIndexedDB(name, version, onUpgrade) {
@@ -136,8 +161,10 @@ function openIndexedDB(name, version, onUpgrade) {
     });
 }
 
-function openDictDB() {
-    return openIndexedDB(DICT_DB_NAME, DICT_DB_VERSION, (db) => {
+// 打开指定词典数据库（默认 ecdict）
+function openDictDB(id) {
+    const name = dictDBName(id || 'ecdict');
+    return openIndexedDB(name, DICT_DB_VERSION, (db) => {
         if (!db.objectStoreNames.contains(DICT_STORE_WORDS)) {
             db.createObjectStore(DICT_STORE_WORDS, { keyPath: 'word' });
         }
@@ -165,12 +192,12 @@ function idbGetDictEntry(store, word) {
 }
 
 // 查询单个单词（优先内存，否则 IndexedDB）
-async function lookupWord(word) {
+async function lookupWord(word, id) {
     if (window.dictLoaded) {
         return window.dictData.get(word.toLowerCase()) || null;
     }
     try {
-        const db = await openDictDB();
+        const db = await openDictDB(id);
         const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
         return await idbGetDictEntry(tx.objectStore(DICT_STORE_WORDS), word);
     } catch (err) {
@@ -179,7 +206,7 @@ async function lookupWord(word) {
 }
 
 // 批量查询单词
-async function lookupWords(wordList) {
+async function lookupWords(wordList, id) {
     const result = new Map();
     if (!wordList || wordList.length === 0) return result;
     // 如果内存已加载，直接查
@@ -190,9 +217,9 @@ async function lookupWords(wordList) {
         });
         return result;
     }
-    // 否则从 IndexedDB 查（大小写容错）
+    // 否则从 IndexedDB 查（大小写容错；id 指定词典库，默认 ecdict）
     try {
-        const db = await openDictDB();
+        const db = await openDictDB(id);
         const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
         const store = tx.objectStore(DICT_STORE_WORDS);
         const entries = await Promise.all(wordList.map(w => idbGetDictEntry(store, w)));
@@ -206,9 +233,9 @@ async function lookupWords(wordList) {
 }
 
 // 统计词典词条总数（直接读 IndexedDB）
-async function countDictEntries() {
+async function countDictEntries(id) {
     try {
-        const db = await openDictDB();
+        const db = await openDictDB(id);
         return await new Promise((resolve) => {
             const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
             const req = tx.objectStore(DICT_STORE_WORDS).count();
@@ -222,10 +249,10 @@ async function countDictEntries() {
 
 // 前缀模糊查询：直接从 IndexedDB 游标扫描前缀区间，
 // 按词频排序（frq 数值小=词频高优先），跳过词频 <=0 的条目
-async function searchDictPrefix(prefix, limit) {
+async function searchDictPrefix(prefix, limit, id) {
     if (!prefix) return [];
     try {
-        const db = await openDictDB();
+        const db = await openDictDB(id);
         const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
         const store = tx.objectStore(DICT_STORE_WORDS);
         const range = IDBKeyRange.bound(prefix, prefix + '\uffff', false, false);
@@ -253,9 +280,9 @@ async function searchDictPrefix(prefix, limit) {
 }
 
 // 检查单词是否已导入（IndexedDB 中有数据）
-async function isDictLoaded() {
+async function isDictLoaded(id) {
     try {
-        const db = await openDictDB();
+        const db = await openDictDB(id);
         return new Promise((resolve) => {
             const tx = db.transaction(DICT_STORE_WORDS, 'readonly');
             const req = tx.objectStore(DICT_STORE_WORDS).count();
@@ -265,6 +292,109 @@ async function isDictLoaded() {
     } catch {
         return false;
     }
+}
+
+// ---------- 词表存储核心（词表/单词持久化，各页面共享） ----------
+let _wordDataCache = null;
+const WORD_DB_NAME = 'WordMemorizerData';
+const WORD_DB_STORE = 'wordData';
+const WORD_DB_VERSION = 1;
+const WORD_DB_KEY = 'main';
+
+function genListId() {
+    return 'list_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+function openWordDB() {
+    return openIndexedDB(WORD_DB_NAME, WORD_DB_VERSION, (db) => {
+        if (!db.objectStoreNames.contains(WORD_DB_STORE)) {
+            db.createObjectStore(WORD_DB_STORE); // 无 keyPath，用 put(value, key)
+        }
+    });
+}
+
+// 读取单词数据（无旧版，仅从 IndexedDB 读取）
+async function loadWordData() {
+    try {
+        const db = await openWordDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readonly');
+            const req = tx.objectStore(WORD_DB_STORE).get(WORD_DB_KEY);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+// 写入 IndexedDB（传入的 data 已剥离 meaning）
+async function writeWordData(data) {
+    try {
+        const db = await openWordDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readwrite');
+            const req = tx.objectStore(WORD_DB_STORE).put(data, WORD_DB_KEY);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        });
+    } catch (e) {
+        return false;
+    }
+}
+
+// 初始化词表内存缓存（无数据则创建默认词表）
+async function initWordDataCache() {
+    if (_wordDataCache) return _wordDataCache;
+    _wordDataCache = await loadWordData();
+    if (!_wordDataCache) {
+        const defaultList = {
+            id: genListId(),
+            name: '默认词表',
+            words: [],
+            pendingWords: [],
+            selectedWord: null
+        };
+        _wordDataCache = { activeListId: defaultList.id, lists: [defaultList] };
+        saveWordData(_wordDataCache);
+    }
+    return _wordDataCache;
+}
+
+function getWordData() {
+    return _wordDataCache;
+}
+
+function saveWordData(data) {
+    _wordDataCache = data;
+    // 剥离 meaning 后保存（只存 word + mnemonic）
+    const stripped = JSON.parse(JSON.stringify(data));
+    stripped.lists.forEach(list => {
+        (list.words || []).forEach(w => { delete w.meaning; });
+        (list.pendingWords || []).forEach(w => { delete w.meaning; });
+        if (list.selectedWord) { delete list.selectedWord.meaning; }
+    });
+    writeWordData(stripped); // 写入 IndexedDB
+}
+
+function getActiveList(data) {
+    const d = data || getWordData();
+    if (!d) return null;
+    return d.lists.find(l => l.id === d.activeListId) || d.lists[0];
+}
+
+// 生成不重复的词表名称：已存在则加序号（中考、中考1、中考2...）
+// excludeId：改名场景下排除自身，避免改回原名被误判重名
+function uniqueListName(baseName, excludeId) {
+    const data = getWordData();
+    if (!data) return baseName;
+    let name = baseName;
+    let seq = 1;
+    while (data.lists.some(l => l.name === name && l.id !== excludeId)) {
+        name = baseName + seq;
+        seq++;
+    }
+    return name;
 }
 
 // ---------- 预设词表（从 preset_data.js 静态加载，window.PRESET_LISTS） ----------
@@ -349,22 +479,21 @@ function hideImportHint() {
 function createDownloadTimeout() {
     return { ctrl: new AbortController() };
 }
-async function autoImportDictFromCSV() {
+async function autoImportDictFromCSV(id) {
     if (window.dictAutoImporting || window.dictLoading) return;
+    const dict = getDictById(id || 'ecdict');
     let loaded = false;
-    try { loaded = await isDictLoaded(); } catch (e) {}
+    try { loaded = await isDictLoaded(dict.id); } catch (e) {}
     if (loaded) return;
     if (window.dictData && window.dictData.size > 0) return;
 
     window.dictAutoImporting = true;
     showImportHint('正在下载词典 0% ...', 0);
     try {
-        // 词典来源：优先本地 data/ecdict.csv（自备），否则从 ECDICT GitHub 仓库在线获取
-        const DICT_CSV_URLS = [
-            'data/ecdict.csv',
-            'https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv'
-        ];
+        // 词典来源（按目录配置顺序尝试）：本地文件 → 加速代理 → GitHub 直连
+        const DICT_CSV_URLS = dict.urls;
         let resp = null;
+        let activeCtrl = null;
         for (const url of DICT_CSV_URLS) {
             // 获取响应头：60 秒绝对超时
             const ctrl = new AbortController();
@@ -372,7 +501,7 @@ async function autoImportDictFromCSV() {
             try {
                 resp = await fetch(url, { signal: ctrl.signal });
                 clearTimeout(t1);
-                if (resp.ok) break;
+                if (resp.ok) { activeCtrl = ctrl; break; }
             } catch (e) {
                 clearTimeout(t1);
                 console.warn('词典源不可用：' + url, e);
@@ -404,7 +533,8 @@ async function autoImportDictFromCSV() {
             const armIdle = () => {
                 clearTimeout(idleTimer);
                 idleTimer = setTimeout(() => {
-                    try { resp.body.cancel('下载停滞'); } catch (e) {}
+                    // 中止原始请求：让挂起的 reader.read() 以 AbortError 结束
+                    try { if (activeCtrl) activeCtrl.abort(); } catch (e) {}
                 }, 30000);
             };
             armIdle();
@@ -452,7 +582,7 @@ async function autoImportDictFromCSV() {
         const idf = {};
         ['word','phonetic','definition','translation','pos','collins','oxford','tag','bnc','frq','exchange'].forEach(k => idf[k] = headers.indexOf(k));
 
-        const db = await openDictDB();
+        const db = await openDictDB(dict.id);
         const batch = 800;
         const total = rows.length - 1;
         let done = 0;
@@ -508,7 +638,7 @@ async function autoImportDictFromCSV() {
 
 // ---------- 页面初始化 ----------
 document.addEventListener('DOMContentLoaded', () => {
-    // 词典不再自动下载：仅检测是否已下载，未下载时提示用户前往「我的词表」下载
+    // 词典不再自动下载：仅检测是否已下载，未下载时提示用户前往「我的词典」下载
     checkDictAvailability();
     // 显示存储用量（localStorage + IndexedDB + 剩余空间），每 5 秒刷新
     updateMemUsage();
@@ -522,7 +652,7 @@ async function checkDictAvailability() {
     try { loaded = await isDictLoaded(); } catch (e) {}
     if (loaded) return;
     setTimeout(() => {
-        showToast('词典尚未下载，可前往「我的词表」页面下载', 'warning');
+        showToast('词典尚未下载，可前往「我的词典」页面下载', 'warning');
     }, 400);
 }
 
@@ -603,12 +733,20 @@ function closeDialog() {
 // 删除 IndexedDB 中的全部数据（单词词表库 + 词典库），并防止刷新后词典被自动重新导入
 function clearAllCache() {
     showConfirm('⚠️ 警告：将清除数据库中的所有数据，包括全部单词列表与词典，此操作无法恢复！确定继续吗？', () => {
-        const dbNames = [
-            typeof WORD_DB_NAME !== 'undefined' ? WORD_DB_NAME : 'WordMemorizerData',
-            DICT_DB_NAME
-        ];
         (async () => {
             try {
+                const dbNames = [
+                    typeof WORD_DB_NAME !== 'undefined' ? WORD_DB_NAME : 'WordMemorizerData'
+                ];
+                // 收集全部词典库（WordMemorizerDict_* 及旧版 WordMemorizerDict）
+                try {
+                    const all = await indexedDB.databases();
+                    all.forEach(d => {
+                        if (d.name && (d.name.indexOf(DICT_DB_PREFIX) === 0 || d.name === 'WordMemorizerDict')) {
+                            dbNames.push(d.name);
+                        }
+                    });
+                } catch (e) {}
                 for (const name of dbNames) {
                     await new Promise((resolve, reject) => {
                         const req = indexedDB.deleteDatabase(name);
