@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=54">
+    <link rel="stylesheet" href="css/style.css?v=98">
 </head>
 <body>
     <!--导航栏-->
@@ -17,7 +17,7 @@
             <span class="banner-divider"></span>
             <a href="./WordMemorizer.html" class="nav-link">背单词</a>
             <a href="./DictLookup.html" class="nav-link">查单词</a>
-            <a href="./MyLists.html" class="nav-link">我的词表</a>
+            <a href="./MyLists.html" class="nav-link">我的词典</a>
         </div>
         <button type="button" class="clear-cache-btn" onclick="clearAllCache()">清除缓存</button>
     </header>
@@ -42,11 +42,7 @@
                         <path d="M512 128C512 114.745 501.255 104 488 104C474.745 104 464 114.745 464 128V464H128C114.745 464 104 474.745 104 488C104 501.255 114.745 512 128 512H464V848C464 861.255 474.745 872 488 872C501.255 872 512 861.255 512 848V512H848C861.255 512 872 501.255 872 488C872 474.745 861.255 464 848 464H512V128Z"/>
                     </svg>
                 </button>
-                <button class="icon-btn" title="关闭" onclick="closeSidebar()">
-                    <svg viewBox="0 0 1024 1024" width="20" height="20" fill="currentColor">
-                        <path d="M195.2 195.2a64 64 0 0 1 90.496 0L512 421.504 738.304 195.2a64 64 0 1 1 90.496 90.496L602.496 512 828.8 738.304a64 64 0 1 1-90.496 90.496L512 602.496 285.696 828.8a64 64 0 1 1-90.496-90.496L421.504 512 195.2 285.696a64 64 0 0 1 0-90.496z"/>
-                    </svg>
-                </button>
+
             </div>
         </div>
         <div class="sidebar-lists" id="sidebarLists">
@@ -109,10 +105,6 @@
                     <span>单轮循环</span>
                     <input type="checkbox" class="onoff" id="roundBtn" onclick="applyRound()">
                 </div>
-                <div class="setting-row">
-                    <span>随机种子</span>
-                    <span id="seedValue" class="seed-value">-</span>
-                </div>
             </div>
         </div>
     </div>
@@ -142,14 +134,10 @@
                 <button class="modal-close" onclick="closeModal('newListModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
-                <p class="tip">输入名称创建空词表，或从下方预设词表选择</p>
+                <p class="tip">输入名称创建空词表；预设词表请在「我的词典」页对应词典的下拉框中选择创建</p>
                 <input type="text" id="newListName" placeholder="词表名称（创建空词表）" style="width:100%;margin-bottom:10px;">
                 <div style="display: flex; gap: 8px; width: 100%;margin-bottom:12px;">
                     <button onclick="createList()">创建空词表</button>
-                </div>
-                <div class="tip" style="border-top:1px solid #5a5c66;padding-top:10px;">预设词表（基于词典 tag 生成）</div>
-                <div id="presetListOptions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
-                    <span style="color:#909399;font-size:0.85rem;">加载中...</span>
                 </div>
             </div>
         </div>
@@ -163,9 +151,9 @@
                 <button class="modal-close" onclick="closeModal('addModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
-                <p class="tip">每行输入一个英文单词。释义可选：留空则自动从本地词典获取，填写则为自定义释义</p>
-                <textarea id="wordInput" placeholder="例如：apple&#10;banana&#10;book"></textarea>
-                <textarea id="customMeaningInput" placeholder="自定义释义（可选）：填写后本批单词使用此释义，不依赖词典"></textarea>
+                <p class="tip">每行一个单词。用 word#释义 可指定自定义意思（# 后为释义，不查词典）；否则自动查词典，词典中不存在的单词会标记为失败</p>
+                <textarea id="wordInput" placeholder="例如：apple&#10;banana#香蕉&#10;book"></textarea>
+                <div id="addFailedList" class="add-failed hidden"></div>
                 <div style="display: flex; gap: 8px; width: 100%;">
                     <button onclick="addWords()">添加单词</button>
                     <button class="danger" onclick="clearAllWords()">清空当前词表</button>
@@ -226,22 +214,22 @@
                     <button class="options" id="optionButton6" onclick="isOptionCorrect(6)">选项6</button>
                 </div>
 
-                <div style="display: flex; gap: 1%;">
+                <div class="draw-btns-row" style="display: flex; gap: 1%;">
                     <button class="check1" onclick="drawWord(1)" id="checkButton1" disabled>认识</button>
                     <button class="check2" onclick="drawWord(0)" id="checkButton2" disabled>不认识</button>
                 </div>
 
-                <div style="display: flex; gap: 1%; margin-top:0.5rem;">
+                <div class="draw-btns-row" style="display: flex; gap: 1%; margin-top:0.5rem;">
                     <button onclick="startDraw()" id="startButton">开始抽取</button>
                     <button onclick="toggleMeaning()" id="showButton">显示意思</button>
                 </div>
 
-                <button style="width: 100%; margin-top:0.5rem;" class="danger" onclick="resetDraw()">重置抽取</button>
+                <button style="width: 100%; margin-top:0.5rem;" class="danger reset-draw-btn" onclick="resetDraw()">重置抽取</button>
             </div>
         </div>
     </main>
 
-    <script src="js/common.js?v=15"></script>
+    <script src="js/common.js?v=19"></script>
     <script src="data/preset_zk.js"></script>
     <script src="data/preset_gk.js"></script>
     <script src="data/preset_cet4.js"></script>
@@ -251,7 +239,7 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=3"></script>
-    <script src="js/script.js?v=14"></script>
+    <script src="js/script.js?v=17"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
