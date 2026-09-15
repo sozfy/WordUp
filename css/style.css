@@ -89,7 +89,7 @@ body {
 h1 {
     text-align: center;
     color: var(--highlight);
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
     font-size: clamp(1.4rem, 4vw, 1.8rem);
 }
 
@@ -591,7 +591,7 @@ button, a, .onoff, input, textarea, select {
     min-height: calc(100vh - 68px);
     min-height: calc(100dvh - 68px);
     position: relative;
-    padding: 2rem 1rem 33px;
+    padding: 1.5rem 1rem 33px;
     /* iPhone 底部安全区 */
     padding-bottom: calc(33px + env(safe-area-inset-bottom));
     width: 100%;
@@ -602,7 +602,6 @@ button, a, .onoff, input, textarea, select {
     display: flex !important;
     flex-direction: column !important;
     color: inherit;
-    gap: 1.5rem;
 }
 
 /* ---------- 首页 ---------- */
@@ -629,6 +628,7 @@ button, a, .onoff, input, textarea, select {
     justify-content: center;
     width: 100%;
     max-width: 600px;
+    margin-bottom: 1.5rem; /* 与下方使用说明分开 */
 }
 
 .mainA1 {
@@ -679,6 +679,10 @@ button, a, .onoff, input, textarea, select {
     padding: 1.25rem;
     box-shadow: 0px 0px 10px 2px var(--bg-overlay-weak);
 }
+/* 相邻区块间距（替代原 .container 的 flex gap） */
+.section + .section {
+    margin-top: 1.5rem;
+}
 
 .section h3 {
     margin-bottom: 0.75rem;
@@ -692,11 +696,36 @@ button, a, .onoff, input, textarea, select {
     margin-bottom: 0.5rem;
 }
 
+/* ---------- 添加单词：失败单词列表 ---------- */
+.add-failed {
+    width: 100%;
+    margin-top: 0.6rem;
+    padding: 0.6rem 0.75rem;
+    background-color: rgba(245, 108, 108, 0.12);
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: var(--danger);
+    line-height: 1.6;
+    word-break: break-all;
+}
+.add-failed-title {
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+}
+.add-failed-words {
+    color: var(--danger);
+}
+
 /* ---------- 抽词区 ---------- */
 .remain-count, .word-count {
     font-size: 0.9rem;
     color: var(--text-tertiary);
     margin: 0.5rem 0;
+}
+/* 查单词页：词典状态小字用浅绿 */
+#dictStatus {
+    color: var(--success-soft);
 }
 
 .active-list-name {
@@ -1120,6 +1149,77 @@ input[type="text"]:focus, input[type="search"]:focus {
         padding: 1rem 0.75rem 33px;
         padding-bottom: calc(33px + env(safe-area-inset-bottom));
     }
+
+    /* ---------- 移动端导航栏适配：高度、间距、图标、文字 ---------- */
+    .banner {
+        height: 52px;
+        padding: 0 10px;
+        padding: 0 calc(10px + env(safe-area-inset-left)) 0 calc(10px + env(safe-area-inset-right));
+    }
+    .bannerLeftBox {
+        gap: 8px;
+    }
+    .bannerLeftBox > a:first-child {
+        height: 40px;
+    }
+    /* 缩小 logo 图标（覆盖内联 style） */
+    .bannerLeftBox > a:first-child svg {
+        height: 24px !important;
+    }
+    .banner-divider {
+        height: 18px;
+    }
+    .bannerLeftBox a.nav-link {
+        font-size: 0.8rem;
+    }
+    .clear-cache-btn {
+        padding: 4px 6px;
+        font-size: 0.78rem;
+    }
+    /* 浮动菜单按钮随导航栏高度下调 */
+    .floating-menu-btn {
+        top: 60px;
+    }
+
+    /* ---------- 移动端：侧边栏（我的词表菜单）宽度与紧凑度 ---------- */
+    .sidebar {
+        width: min(300px, 82vw);
+        max-width: 82vw;
+    }
+    .sidebar-header {
+        padding: 12px 14px;
+    }
+    .sidebar-header h3 {
+        font-size: 1rem;
+    }
+    .sidebar-list-item {
+        padding: 9px 10px;
+        margin: 2px 6px;
+    }
+    .sidebar-footer {
+        padding: 6px 14px 10px;
+    }
+
+    /* ---------- 移动端：各页面大标题大小与间距 ---------- */
+    h1 {
+        font-size: 1.35rem;
+        margin-bottom: 1rem;
+    }
+    .section h3 {
+        margin-bottom: 0.6rem;
+        font-size: 1.05rem;
+    }
+
+    /* ---------- 移动端：主要内容间距 ---------- */
+    .main-content {
+        padding-top: 52px; /* 与移动端导航栏高度 52px 对齐 */
+    }
+    .section {
+        padding: 1rem;
+    }
+    .section + .section {
+        margin-top: 12px;
+    }
 }
 
 /* 查询按钮：不撑满，固定宽度 */
@@ -1141,13 +1241,31 @@ input[type="text"]:focus, input[type="search"]:focus {
     margin-bottom: 0;
 }
 
-/* 查单词：词典状态工具行（状态 + 应载词数 + 重新导入按钮） */
+/* 查单词：词典工具行（词典下拉框 + 状态 + 重新导入按钮） */
 .dict-toolbar {
     display: flex;
     align-items: center;
     gap: 12px;
     margin-bottom: 8px;
     flex-wrap: wrap;
+}
+.dict-select {
+    flex: 0 0 auto;
+    min-width: 170px;
+    padding: 6px 10px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--white);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.dict-select:hover {
+    border-color: var(--accent);
+}
+.dict-select option {
+    background-color: var(--bg-panel);
+    color: var(--white);
 }
 .dict-total {
     font-size: 13px;
@@ -1216,11 +1334,12 @@ input[type="text"]:focus, input[type="search"]:focus {
     padding: 6px 12px;
 }
 
-/* 拆分/合并：输入框与选择框高度宽度一致，按钮高度一致，上下居中 */
+/* 拆分/合并：输入框与选择框占满整行剩余宽度，按钮固定宽度，上下居中 */
 #splitCount,
 #mergeSelect {
-    width: 220px;
-    flex: 0 0 220px;
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
     height: 38px;
     box-sizing: border-box;
     padding: 6px 10px;
@@ -1257,7 +1376,7 @@ input[type="text"]:focus, input[type="search"]:focus {
     align-items: center;
     justify-content: center;
     vertical-align: middle;
-    margin-top: 2px;
+    margin: 0; /* 覆盖全局 button margin-bottom:10px，保证与输入框/选择框上下居中 */
     line-height: 1;
 }
 
@@ -1466,13 +1585,15 @@ input.spell-input {
     margin-top: 12px;
 }
 .dict-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 14px;
+    padding: 12px 14px 24px; /* 底部少量留白：右下角放置预设词表箭头 */
     background-color: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 8px;
+    cursor: pointer; /* 整行可点击展开预设词表 */
 }
 .dict-info {
     flex: 1;
@@ -1510,6 +1631,15 @@ input.spell-input {
     display: flex;
     gap: 8px;
 }
+/* 按钮侧边组：桌面透明（子元素直接参与词典行单行排列） */
+.dict-side {
+    display: contents;
+}
+.dict-side-row1 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 .dict-actions button {
     flex: 0 0 auto;
     margin-bottom: 0;
@@ -1527,6 +1657,116 @@ input.spell-input {
 .dict-actions button.danger:hover:not(:disabled) {
     background-color: var(--danger-2);
 }
+/* 重新下载：纯图标按钮，橙色打底（位于操作组外，与状态标签同行） */
+.reload-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    padding: 6px 0;
+    margin: 0;
+    background-color: var(--warning);
+    color: #fff;
+    border: 1px solid var(--warning);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+}
+.reload-icon:hover:not(:disabled) {
+    background-color: var(--warning);
+    filter: brightness(1.12);
+}
+.reload-icon:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+/* 共 x / y 词：与状态分开单独一行 */
+.dict-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+/* 预设词表：箭头融入词典行框内、完全右下角（纯箭头，无背景无间隔）；点击后行下方推出深色展开区 */
+.dict-preset-btn {
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    margin: 0 0 0 -9px; /* 水平居中（18px 宽的一半），垂直位于行底部 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 14px; /* 与图标同高，取消上下内边距 */
+    padding: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+.dict-preset-btn:hover:not(:disabled) {
+    color: var(--text-secondary); /* 悬停不变蓝 */
+}
+.dict-preset-btn.open {
+    transform: rotate(180deg);
+    color: var(--text-secondary); /* 展开不变蓝 */
+}
+/* 展开区：深色框，位于词典行下方（文档流内，展开时把下方内容往下推） */
+.dict-preset-expand {
+    display: none;
+    margin-top: -10px; /* 抵消 .dict-list 的 flex gap，紧贴上方词典行 */
+    padding: 12px;
+    background-color: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.dict-preset-expand.open {
+    opacity: 1;
+    transform: translateY(0);
+}
+/* 展开区顶部文字提示 */
+.preset-tip {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+.preset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+/* 每个预设词表一个小标签（随内容长度变化，非等宽方格） */
+.preset-chip {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto; /* 覆盖全局 button 的 flex:1，宽度随文字 */
+    width: auto;
+    gap: 5px;
+    padding: 5px 12px;
+    margin: 0; /* 覆盖全局 button 的 margin-bottom */
+    background-color: var(--bg-panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 999px; /* 胶囊标签 */
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.preset-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.preset-chip .cnt {
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
 .dict-busy-tip {
     display: none;
     margin-top: 12px;
@@ -1537,4 +1777,80 @@ input.spell-input {
     color: var(--highlight);
     font-size: 13px;
     text-align: center;
+}
+
+/* ---------- 窄屏：词典行操作按钮随屏幕变小而紧凑（置于末尾确保覆盖基础规则） ---------- */
+@media (max-width: 600px) {
+    .dict-row {
+        gap: 12px;
+        padding: 12px 14px 24px;
+        align-items: center; /* 侧边按钮组在词典行内上下居中 */
+    }
+    .dict-info {
+        flex: 1; /* 信息占左，撑起行高 */
+        min-width: 0;
+    }
+    .dict-side {
+        display: flex;
+        flex-direction: column;
+        justify-content: center; /* 4 个按钮作为一个整体上下居中 */
+        align-items: flex-end;   /* 靠右 */
+        gap: 8px;
+        flex: 0 0 auto;
+    }
+    .dict-side-row1 {
+        gap: 6px;
+    }
+    .dict-actions {
+        gap: 6px;
+        flex-basis: auto;
+    }
+    .dict-actions button {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+    .reload-icon {
+        width: 28px;
+        padding: 3px 0;
+    }
+    .dict-actions button.reload-icon {
+        width: 28px;
+        height: 28px;
+    }
+    .dict-status {
+        padding: 2px 8px;
+        font-size: 11px;
+    }
+    .dict-preset-btn {
+        width: 16px;
+        height: 12px;
+        margin-left: -8px;
+    }
+    /* ---------- 移动端：侧边栏按钮缩小（设置/添加单词/查看/编辑/删除/新建） ---------- */
+    .footer-icon-btn {
+        width: 38px;
+        height: 38px;
+    }
+    .footer-icon-btn svg {
+        width: 20px !important;
+        height: 20px !important;
+    }
+    .list-action-btn, .icon-btn {
+        width: 26px;
+        height: 26px;
+    }
+    .list-item-actions {
+        gap: 2px;
+    }
+    /* ---------- 移动端：当前列表与待抽取个数减小上下间距 ---------- */
+    .active-list-name {
+        margin: 0.1rem 0 0.25rem;
+    }
+    .remain-count, .word-count {
+        margin: 0.2rem 0;
+    }
+    /* ---------- 移动端：认识/不认识、开始抽取、重置抽取按钮间隔缩短 ---------- */
+    .draw-btns-row, .reset-draw-btn {
+        margin-top: 0.2rem !important;
+    }
 }
