@@ -568,8 +568,9 @@ button, a, .onoff, input, textarea, select {
     color: var(--white);
     border: 1px solid var(--border);
     border-radius: 5px;
-    padding: 4px 8px;
-    font-size: 0.9rem;
+    padding: 1px 6px;
+    font-size: 0.85rem;
+    line-height: 1.2;
     cursor: pointer;
     margin-left: 8px;
 }
@@ -678,6 +679,7 @@ button, a, .onoff, input, textarea, select {
     border-radius: 12px;
     padding: 1.25rem;
     box-shadow: 0px 0px 10px 2px var(--bg-overlay-weak);
+    position: relative; /* 供"删除单词"右上角定位 */
 }
 /* 相邻区块间距（替代原 .container 的 flex gap） */
 .section + .section {
@@ -742,6 +744,29 @@ button, a, .onoff, input, textarea, select {
     background-color: var(--bg-panel);
     border-radius: 8px;
     min-height: 220px;
+    position: relative;
+}
+
+/* 内容区右上角"删除单词"（文字形式，显示区外） */
+.delete-current-word {
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    padding: 3px 8px;
+    margin: 0;
+    flex: none;
+    font-size: 0.8rem;
+    color: var(--danger, #ff6b6b);
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.85;
+    z-index: 5;
+}
+.delete-current-word:hover {
+    opacity: 1;
+    background-color: var(--bg-main);
 }
 
 .word-last {
@@ -1191,8 +1216,8 @@ input[type="text"]:focus, input[type="search"]:focus {
 
     /* ---------- 移动端：侧边栏（我的词表菜单）宽度与紧凑度 ---------- */
     .sidebar {
-        width: min(300px, 82vw);
-        max-width: 82vw;
+        width: min(280px, 70vw);
+        max-width: 70vw;
     }
     .sidebar-header {
         padding: 12px 14px;
@@ -1595,6 +1620,7 @@ input.spell-input {
 }
 .dict-row {
     position: relative;
+    z-index: 1; /* 词典行位于预设词表展开区之上 */
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1718,6 +1744,7 @@ input.spell-input {
 }
 .dict-preset-btn:hover:not(:disabled) {
     color: var(--text-secondary); /* 悬停不变蓝 */
+    background-color: transparent; /* 悬停不变色（覆盖全局 button:hover 背景） */
 }
 .dict-preset-btn.open {
     transform: rotate(180deg);
@@ -1726,6 +1753,8 @@ input.spell-input {
 /* 展开区：深色框，位于词典行下方（文档流内，展开时把下方内容往下推） */
 .dict-preset-expand {
     display: none;
+    position: relative;
+    z-index: 0; /* 堆叠顺序小于词典行 */
     margin-top: -10px; /* 抵消 .dict-list 的 flex gap，紧贴上方词典行 */
     padding: 12px;
     background-color: var(--bg-deep);
@@ -1895,5 +1924,19 @@ input.spell-input {
     #searchBtn {
         height: 34px;
         font-size: 13px;
+    }
+}
+
+/* ---------- 移动端：背单词显示区单词-音标-意思间距缩短 ---------- */
+@media (max-width: 600px) {
+    .word {
+        margin-top: 4px;
+        margin-bottom: 2px;
+    }
+    .phonetic {
+        margin-top: 2px;
+    }
+    .meaning {
+        margin-top: 2px;
     }
 }
