@@ -326,7 +326,10 @@ function updateActiveListName() {
 // ---------- UI 更新辅助函数 ----------
 function updateRemainCount() {
     const list = getActiveList();
-    document.getElementById('remainCount').textContent = '待抽取个数：' + list.pendingWords.length;
+    let remain = list.pendingWords.length;
+    // 记忆队列：队列中的单词视为未抽取，计入待抽取个数
+    if (isQueueOn()) remain += _memoryQueue.length;
+    document.getElementById('remainCount').textContent = '待抽取个数：' + remain;
 }
 
 // ---------- 可播种随机：种子 = 当前时间（YYYYMMDDHHMMSS），用于随机抽词/选项 ----------
@@ -578,11 +581,31 @@ function deleteWordFromList(word) {
         if (Array.isArray(list.roundKnown)) list.roundKnown = list.roundKnown.filter(w => String(w).toLowerCase() !== lower);
         if (Array.isArray(list.roundUnknown)) list.roundUnknown = list.roundUnknown.filter(w => String(w).toLowerCase() !== lower);
         saveWordData(data);
-        renderSidebarLists();
         refreshCurrentList();
-        updateDraw();
         updateRemainCount();
         showToast('已删除单词「' + target.word + '」', 'success');
+    });
+}
+
+// 背单词时删除当前单词（确认提示后从词表移除并跳到下一个）
+function deleteCurrentWord() {
+    const data = getWordData();
+    const list = getActiveList(data);
+    if (!list.selectedWord) return;
+    const word = list.selectedWord.word;
+    const lower = word.toLowerCase();
+    showConfirm('确定要从「' + list.name + '」中删除单词「' + word + '」吗？', () => {
+        const data2 = getWordData();
+        const list2 = getActiveList(data2);
+        list2.words = list2.words.filter(w => w.word.toLowerCase() !== lower);
+        list2.pendingWords = list2.pendingWords.filter(w => w.word.toLowerCase() !== lower);
+        _memoryQueue = _memoryQueue.filter(w => w.word.toLowerCase() !== lower);
+        if (Array.isArray(list2.roundKnown)) list2.roundKnown = list2.roundKnown.filter(w => String(w).toLowerCase() !== lower);
+        if (Array.isArray(list2.roundUnknown)) list2.roundUnknown = list2.roundUnknown.filter(w => String(w).toLowerCase() !== lower);
+        if (list2.selectedWord && list2.selectedWord.word.toLowerCase() === lower) list2.selectedWord = null;
+        saveWordData(data2);
+        drawWord(1); // selectedWord 已清空：跳过判定，直接抽取/显示下一个
+        showToast('已删除单词「' + word + '」', 'success');
     });
 }
 
@@ -695,9 +718,14 @@ function isOptionCorrect(num) {
         markedBtn.innerText = '× ' + selectedOption.word + '-' + flattenNewlines(selectedOption.meaning);
         markedBtn.style.backgroundColor = '#f56c6c';
     }
-    // 作答后允许换行显示完整内容，避免窄屏截断释义
-    markedBtn.style.whiteSpace = 'normal';
-    markedBtn.style.wordBreak = 'break-word';
+    // 作答后按"详细释义"开关决定是否展开完整释义（未开启时保持缩略省略）
+    if (full) {
+        markedBtn.style.whiteSpace = 'normal';
+        markedBtn.style.wordBreak = 'break-word';
+    } else {
+        markedBtn.style.whiteSpace = '';
+        markedBtn.style.wordBreak = '';
+    }
 
     // 点击选项后显示当前单词的意思（选择题模式）
     const meaningEl = document.getElementById('currentMeaning');
@@ -730,13 +758,8 @@ function drawWord(num) {
 
     // ---- 记录当前选中词的判定 ----
     if (list.selectedWord) {
-        if (queueMode) {
-            // 记忆队列：不认识 → 放队列末尾（稍后再次显示）；认识 → 消费（不放回）
-            if (num === 0) {
-                _memoryQueue.push(list.selectedWord);
-            }
-        } else if (roundOn) {
-            // 单轮循环：认识/不认识均不放回，仅记录判定
+        if (roundOn) {
+            // 单轮循环：记录本轮判定（与记忆队列可共存）
             list.roundKnown = list.roundKnown || [];
             list.roundUnknown = list.roundUnknown || [];
             const w = list.selectedWord.word;
@@ -744,6 +767,12 @@ function drawWord(num) {
                 if (!list.roundUnknown.includes(w)) list.roundUnknown.push(w);
             } else {
                 if (!list.roundKnown.includes(w)) list.roundKnown.push(w);
+            }
+        }
+        if (queueMode) {
+            // 记忆队列：不认识 → 放队列末尾（稍后再次显示）；认识 → 消费（不放回）
+            if (num === 0) {
+                _memoryQueue.push(list.selectedWord);
             }
         } else if (num === 0) {
             // 普通模式：不认识放回待抽取
@@ -754,8 +783,8 @@ function drawWord(num) {
         document.getElementById('lastWord').textContent = list.lastJudged;
     }
 
-    // ---- 单轮循环：本轮已抽完 ----
-    if (roundOn && list.pendingWords.length === 0) {
+    // ---- 单轮循环：本轮已抽完（记忆队列模式下由队列流转，不在此结束） ----
+    if (roundOn && !queueMode && list.pendingWords.length === 0) {
         list.selectedWord = null;
         saveWordData(data);
         const hasResult = (list.roundKnown || []).length + (list.roundUnknown || []).length > 0;
@@ -791,9 +820,9 @@ function drawWord(num) {
 
     // ---- 抽下一个 ----
     if (queueMode) {
-        // 记忆队列：队列为空时重新建立（随机抽 min(5, 待抽取数) 个填入）
+        // 记忆队列：队列为空时重新建立（随机抽 min(队列长度, 待抽取数) 个填入）
         if (_memoryQueue.length === 0 && list.pendingWords.length > 0) {
-            const n = Math.min(QUEUE_SIZE, list.pendingWords.length);
+            const n = Math.min(getQueueSize(), list.pendingWords.length);
             for (let i = 0; i < n; i++) {
                 const idx = Math.floor(_rng() * list.pendingWords.length);
                 _memoryQueue.push(list.pendingWords.splice(idx, 1)[0]);
@@ -1018,24 +1047,41 @@ function applySwap() {
     showOption();
 }
 
-// ---------- 记忆队列（开始抽取后建立长度 5 的队列，不认识放队尾、不抽新词） ----------
-const QUEUE_SIZE = 5;
-let _memoryQueue = []; // 队列中的单词对象（已从待抽取中移出）
+// ---------- 记忆队列（开始抽取后建立队列，不认识放队尾、不抽新词） ----------
+const QUEUE_SIZE_DEFAULT = 5; // 默认队列长度
+let _memoryQueue = []; // 队列中的单词对象（已从待抽取中移出；视为未抽取，重置时放回）
 function isQueueOn() {
     const b = document.getElementById('queueBtn');
     return !!(b && b.checked);
+}
+function getQueueSize() {
+    const sel = document.getElementById('queueSizeSelect');
+    if (sel) {
+        const v = parseInt(sel.value, 10);
+        if (v >= 3 && v <= 10) return v;
+    }
+    try {
+        const v = parseInt(localStorage.getItem('queueSize'), 10);
+        if (v >= 3 && v <= 10) return v;
+    } catch (e) {}
+    return QUEUE_SIZE_DEFAULT;
+}
+function applyQueueSize() {
+    const sel = document.getElementById('queueSizeSelect');
+    if (!sel) return;
+    try { localStorage.setItem('queueSize', sel.value); } catch (e) {}
+    _memoryQueue = [];
+    applyResetDraw();
+    showToast('队列长度已设为 ' + getQueueSize(), 'success');
 }
 function applyQueue() {
     const b = document.getElementById('queueBtn');
     if (!b) return;
     const on = b.checked;
     try { localStorage.setItem('queueMode', on ? '1' : '0'); } catch (e) {}
-    // 与单轮循环互斥：开启记忆队列时自动关闭单轮循环
-    const roundBtn = document.getElementById('roundBtn');
-    if (on && roundBtn && roundBtn.checked) {
-        roundBtn.checked = false;
-        try { localStorage.setItem('roundMode', '0'); } catch (e) {}
-    }
+    // 开启时显示"队列长度"详细设置分组
+    const sub = document.getElementById('queueSubBox');
+    if (sub) sub.classList.toggle('hidden', !on);
     _memoryQueue = [];
     applyResetDraw();
     showToast(on ? '已开启记忆队列（不认识放入队尾，不抽取新单词）' : '已关闭记忆队列', 'success');
@@ -1047,13 +1093,6 @@ function applyRound() {
     if (!roundBtn) return;
     const on = roundBtn.checked;
     try { localStorage.setItem('roundMode', on ? '1' : '0'); } catch (e) {}
-    // 与记忆队列互斥：开启单轮循环时自动关闭记忆队列
-    const queueBtn = document.getElementById('queueBtn');
-    if (on && queueBtn && queueBtn.checked) {
-        queueBtn.checked = false;
-        try { localStorage.setItem('queueMode', '0'); } catch (e) {}
-        _memoryQueue = [];
-    }
     // 切换时清空本轮判定记录
     const list = getActiveList();
     if (list) {
@@ -1402,14 +1441,21 @@ function clearAllWords() {
     if (roundBtn) {
         try { roundBtn.checked = localStorage.getItem('roundMode') === '1'; } catch (e) {}
     }
-    // 恢复"记忆队列"设置（与单轮循环互斥）
+    // 恢复"记忆队列"设置
     const queueBtn = document.getElementById('queueBtn');
     if (queueBtn) {
         try { queueBtn.checked = localStorage.getItem('queueMode') === '1'; } catch (e) {}
-        if (queueBtn.checked && roundBtn && roundBtn.checked) {
-            roundBtn.checked = false;
-            try { localStorage.setItem('roundMode', '0'); } catch (e) {}
-        }
+        // 恢复时同步"队列长度"子框显隐
+        const sub = document.getElementById('queueSubBox');
+        if (sub) sub.classList.toggle('hidden', !queueBtn.checked);
+    }
+    // 恢复"队列长度"设置
+    const queueSizeSel = document.getElementById('queueSizeSelect');
+    if (queueSizeSel) {
+        try {
+            const v = parseInt(localStorage.getItem('queueSize'), 10);
+            if (v >= 3 && v <= 10) queueSizeSel.value = String(v);
+        } catch (e) {}
     }
     // 恢复"显示音标"设置
     const phoneticBtn = document.getElementById('phoneticBtn');
