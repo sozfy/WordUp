@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=98">
+    <link rel="stylesheet" href="css/style.css?v=102">
 </head>
 <body>
     <!--导航栏-->
@@ -92,6 +92,14 @@
                         <span>详细释义</span>
                         <input type="checkbox" class="onoff" id="detailMeaningBtn" onclick="applyDetailMeaning()">
                     </div>
+                    <div class="setting-row" id="closeManualConfirmRow">
+                        <span>关闭手动确认</span>
+                        <input type="checkbox" class="onoff" id="closeManualConfirmBtn" onclick="applyCloseManualConfirm()">
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <span>显示音标</span>
+                    <input type="checkbox" class="onoff" id="phoneticBtn" onclick="applyPhonetic()">
                 </div>
                 <div class="setting-row">
                     <span>开启拼写</span>
@@ -104,6 +112,10 @@
                 <div class="setting-row">
                     <span>单轮循环</span>
                     <input type="checkbox" class="onoff" id="roundBtn" onclick="applyRound()">
+                </div>
+                <div class="setting-row">
+                    <span>记忆队列</span>
+                    <input type="checkbox" class="onoff" id="queueBtn" onclick="applyQueue()">
                 </div>
             </div>
         </div>
@@ -200,6 +212,7 @@
                 <div class="word-display">
                     <div class="word-last" id="lastWord">上一个单词</div>
                     <div class="word" id="currentWord">点击开始抽取单词</div>
+                    <div class="phonetic hidden" id="currentPhonetic"></div>
                     <div class="meaning hidden" id="currentMeaning"></div>
                 </div>
 
@@ -221,10 +234,10 @@
 
                 <div class="draw-btns-row" style="display: flex; gap: 1%; margin-top:0.5rem;">
                     <button onclick="startDraw()" id="startButton">开始抽取</button>
-                    <button onclick="toggleMeaning()" id="showButton">显示意思</button>
+                    <button class="danger reset-draw-btn" onclick="resetDraw()">重置抽取</button>
                 </div>
 
-                <button style="width: 100%; margin-top:0.5rem;" class="danger reset-draw-btn" onclick="resetDraw()">重置抽取</button>
+                <button style="width: 100%; margin-top:0.5rem;" onclick="toggleMeaning()" id="showButton">显示意思</button>
             </div>
         </div>
     </main>
@@ -239,7 +252,7 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=3"></script>
-    <script src="js/script.js?v=17"></script>
+    <script src="js/script.js?v=24"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
