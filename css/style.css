@@ -773,6 +773,14 @@ button, a, .onoff, input, textarea, select {
     white-space: normal;
 }
 
+.phonetic {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    min-height: 1.2em;
+    word-break: break-word;
+}
+
 /* 词意互换：意思用小字号（绿）、单词用大字号（白），位置不变 */
 #currentWord.swap-mode {
     font-size: 1.1rem;
@@ -1229,6 +1237,7 @@ input[type="text"]:focus, input[type="search"]:focus {
     height: 36px;
     box-sizing: border-box;
     line-height: 1;
+    padding: 4px 12px; /* 上下内边距调小 */
 }
 
 #searchBtn {
@@ -1850,7 +1859,41 @@ input.spell-input {
         margin: 0.2rem 0;
     }
     /* ---------- 移动端：认识/不认识、开始抽取、重置抽取按钮间隔缩短 ---------- */
-    .draw-btns-row, .reset-draw-btn {
+    .draw-btns-row {
         margin-top: 0.2rem !important;
+    }
+}
+
+/* ---------- 移动端：单词查询页主内容字体大小与内边距 ---------- */
+@media (max-width: 600px) {
+    .dict-toolbar {
+        gap: 8px;
+    }
+    .dict-select {
+        min-width: 140px;
+        padding: 6px 8px;
+        font-size: 0.85rem;
+    }
+    .dict-result {
+        padding: 0.9rem;
+    }
+    .dict-word {
+        font-size: 1.3rem;
+    }
+    .dict-phonetic {
+        font-size: 0.85rem;
+    }
+    .dict-translation {
+        font-size: 0.9rem;
+    }
+    .dict-definition {
+        font-size: 0.85rem;
+    }
+    #searchInput {
+        height: 34px;
+    }
+    #searchBtn {
+        height: 34px;
+        font-size: 13px;
     }
 }
