@@ -246,6 +246,36 @@ function createFromPresetTag(tag) {
 
 // ---------- 我的词表区：背单词页"保存到我的词典"复制的词表 ----------
 // 词表仅有三个操作：添加单词、删除、添加到词表
+// 新建词表（我的词表）
+function showCreateSavedListModal() {
+    const nameInput = document.getElementById('savedCreateName');
+    if (nameInput) nameInput.value = '';
+    myOpenModal('savedCreateModal');
+}
+function doCreateSavedList() {
+    const data = getWordData();
+    const nameInput = document.getElementById('savedCreateName');
+    const name = (nameInput.value || '').trim();
+    if (!name) { showToast('请输入词表名称', 'warning'); return; }
+    let finalName = name;
+    let seq = 2;
+    while (data.lists.some(l => l.name === finalName)) { finalName = name + seq; seq++; }
+    const newList = {
+        id: genListId(),
+        name: finalName,
+        words: [],
+        pendingWords: [],
+        selectedWord: null,
+        queueWords: [],
+        savedToDict: true
+    };
+    data.lists.push(newList);
+    saveWordData(data);
+    myCloseModal('savedCreateModal');
+    renderSavedLists();
+    showToast('已创建词表"' + finalName + '"', 'success');
+}
+
 function myOpenModal(id) {
     const m = document.getElementById(id);
     if (m) { m.classList.add('visible'); document.body.style.overflow = 'hidden'; }

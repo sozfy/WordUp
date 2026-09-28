@@ -905,15 +905,15 @@ function drawWord(num) {
                 _memoryQueue.push(list.selectedWord);
             }
         } else if (num === 0) {
-            // 普通模式：不认识放回待抽取
-            list.pendingWords.push(list.selectedWord);
+            // 普通模式：不认识放回待抽取；单轮循环模式下不放回（本轮结束后统一统计处理，否则本轮永远抽不完）
+            if (!roundOn) list.pendingWords.push(list.selectedWord);
         }
         // 记住本词表的上一个判定词，切换词表后仍可显示各自的上一个单词
         list.lastJudged = list.selectedWord.word + ' — ' + list.selectedWord.meaning;
         document.getElementById('lastWord').textContent = list.lastJudged;
     }
 
-    // ---- 单轮循环：本轮已抽完（记忆队列模式下由队列流转，不在此结束） ----
+    // ---- 单轮循环：本轮已抽完（与记忆队列互斥，互斥后正常触发） ----
     if (roundOn && !queueMode && list.pendingWords.length === 0) {
         list.selectedWord = null;
         saveWordData(data);
@@ -998,6 +998,12 @@ function drawWord(num) {
     document.getElementById('currentMeaning').textContent = swap ? list.selectedWord.word : meaningText;
     document.getElementById('currentMeaning').classList.add('hidden');
     updatePhoneticDisplay();
+
+    // 单轮循环：本轮全部单词已抽完并显示（最后一个词刚显示），立即结束本轮弹出统计
+    if (roundOn && !queueMode && list.pendingWords.length === 0) {
+        finishRound();
+        return;
+    }
 
     // 显示意思按钮常开；认识/不认识需先点一次显示意思
     document.getElementById('checkButton1').disabled = true;
