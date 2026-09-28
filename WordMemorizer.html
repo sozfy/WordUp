@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=110">
+    <link rel="stylesheet" href="css/style.css?v=111">
 </head>
 <body>
     <!--导航栏-->
@@ -45,12 +45,18 @@
 
             </div>
         </div>
+        <div class="sidebar-batch-bar" id="sidebarBatchBar">
+            <button type="button" class="batch-toggle-btn" id="batchToggleBtn" onclick="toggleBatchDelete()">批量删除</button>
+        </div>
         <div class="sidebar-lists" id="sidebarLists">
             <!-- 列表项由 JS 动态渲染 -->
         </div>
         <!-- 侧边栏底部：内存显示 + 设置/添加按钮 -->
         <div class="sidebar-footer">
             <div class="sidebar-mem" id="memUsage"></div>
+            <div class="batch-footer-row hidden" id="batchFooterRow">
+                <button type="button" class="danger" id="batchDeleteBtn" onclick="batchDeleteSelected()" disabled>删除选中(0)</button>
+            </div>
             <div class="sidebar-footer-buttons">
                 <button class="footer-icon-btn" type="button" title="设置">
                 <svg viewBox="0 0 1024 1024" width="24" height="24" fill="currentColor">
@@ -75,12 +81,12 @@
             </div>
             <div class="modal-body">
                 <div class="setting-row">
-                    <span>开启选择</span>
+                    <span>开启选择 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后显示多个释义选项，通过选择正确释义来记忆单词')">?</i></span>
                     <input type="checkbox" class="onoff" id="switchBtn" checked onclick="showOption()">
                 </div>
                 <div class="option-sub-box hidden" id="optionSubBox">
                     <div class="setting-row" id="optionCountRow">
-                        <span>选项个数</span>
+                        <span>选项个数 <i class="opt-help" onclick="event.stopPropagation();showHelp('每次显示的选择选项数量，可选 3~6 个')">?</i></span>
                         <select id="optionCountSelect" onchange="applyOptionCount()">
                             <option value="3">3</option>
                             <option value="4" selected>4</option>
@@ -89,37 +95,37 @@
                         </select>
                     </div>
                     <div class="setting-row" id="detailMeaningRow">
-                        <span>详细释义</span>
+                        <span>详细释义 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后，选项中过长的释义不省略，全部展示')">?</i></span>
                         <input type="checkbox" class="onoff" id="detailMeaningBtn" onclick="applyDetailMeaning()">
                     </div>
                     <div class="setting-row" id="closeManualConfirmRow">
-                        <span>关闭手动确认</span>
+                        <span>关闭手动确认 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后，选项选择的正确与否直接作为认识/不认识判定，选择后 1 秒自动跳到下一个，并隐藏认识/不认识按钮')">?</i></span>
                         <input type="checkbox" class="onoff" id="closeManualConfirmBtn" onclick="applyCloseManualConfirm()">
                     </div>
                 </div>
                 <div class="setting-row">
-                    <span>显示音标</span>
+                    <span>显示音标 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后，在显示区的单词和意思之间新增一行音标')">?</i></span>
                     <input type="checkbox" class="onoff" id="phoneticBtn" onclick="applyPhonetic()">
                 </div>
                 <div class="setting-row">
-                    <span>开启拼写</span>
+                    <span>开启拼写 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后显示拼写输入框，输入单词进行拼写练习')">?</i></span>
                     <input type="checkbox" class="onoff" id="spellBtn" onclick="applySpell()">
                 </div>
                 <div class="setting-row">
-                    <span>词意互换</span>
+                    <span>词意互换 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后，主显示区显示意思、选项显示单词，按钮变为"显示单词"')">?</i></span>
                     <input type="checkbox" class="onoff" id="swapBtn" onclick="applySwap()">
                 </div>
                 <div class="setting-row">
-                    <span>单轮循环</span>
+                    <span>单轮循环 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后本轮抽取过的单词不再重复出现，全部背完后弹出统计（与记忆队列互斥）')">?</i></span>
                     <input type="checkbox" class="onoff" id="roundBtn" onclick="applyRound()">
                 </div>
                 <div class="setting-row">
-                    <span>记忆队列</span>
+                    <span>记忆队列 <i class="opt-help" onclick="event.stopPropagation();showHelp('开启后开始抽取时建立队列，不认识的单词放回队尾，不抽取新单词（与单轮循环互斥）')">?</i></span>
                     <input type="checkbox" class="onoff" id="queueBtn" onclick="applyQueue()">
                 </div>
                 <div class="option-sub-box hidden" id="queueSubBox">
                     <div class="setting-row" id="queueSizeRow">
-                        <span>队列长度</span>
+                        <span>队列长度 <i class="opt-help" onclick="event.stopPropagation();showHelp('记忆队列的长度，可选 3~10 个')">?</i></span>
                         <select id="queueSizeSelect" onchange="applyQueueSize()">
                             <option value="3">3</option>
                             <option value="4">4</option>
@@ -181,10 +187,13 @@
                 <p class="tip">每行一个单词。用 word#释义 可指定自定义意思（# 后为释义，不查词典）；否则自动查词典，词典中不存在的单词会标记为失败</p>
                 <textarea id="wordInput" placeholder="例如：apple&#10;banana#香蕉&#10;book"></textarea>
                 <div id="addFailedList" class="add-failed hidden"></div>
-                <div style="display: flex; gap: 8px; width: 100%;">
+                <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
                     <button onclick="addWords()">添加单词</button>
+                    <button onclick="triggerExcelImport()">从Excel导入</button>
                     <button class="danger" onclick="clearAllWords()">清空当前词表</button>
                 </div>
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none;" onchange="handleExcelFile(this.files[0])">
+                <p class="tip excel-tip">Excel/CSV 导入格式：第 1 列单词、第 2 列意思，第 3 列助记、第 4 列音标（均可选，允许为空）</p>
             </div>
         </div>
     </div>
@@ -208,6 +217,9 @@
                 </div>
                 <div class="word-search-row">
                     <input type="text" id="wordListSearch" placeholder="搜索单词或释义" oninput="onWordListSearch()">
+                </div>
+                <div class="save-to-dict-row">
+                    <button id="saveToDictBtn" onclick="saveListToDict()">保存到我的词典</button>
                 </div>
                 <div class="word-list" id="wordListDisplay">暂无单词</div>
             </div>
@@ -257,7 +269,8 @@
         </div>
     </main>
 
-    <script src="js/common.js?v=19"></script>
+    <script src="js/lib/xlsx.core.min.js"></script>
+    <script src="js/common.js?v=20"></script>
     <script src="data/preset_zk.js"></script>
     <script src="data/preset_gk.js"></script>
     <script src="data/preset_cet4.js"></script>
@@ -267,7 +280,7 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=3"></script>
-    <script src="js/script.js?v=30"></script>
+    <script src="js/script.js?v=33"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>

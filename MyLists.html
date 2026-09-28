@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>我的词典</title>
-    <link rel="stylesheet" href="css/style.css?v=110">
+    <link rel="stylesheet" href="css/style.css?v=111">
 </head>
 <body>
     <script>window.disableAutoDictImport = true;</script>
@@ -33,8 +33,51 @@
                 <div id="dictList" class="dict-list"></div>
                 <div id="dictBusyTip" class="dict-busy-tip"></div>
             </div>
+
+            <div class="section my-lists-section">
+                <h3>我的词表</h3>
+                <p class="tip">从背单词页「词表详细 → 保存到我的词典」复制的词表会显示在这里，与背单词页的词表互相独立。</p>
+                <div id="savedListContainer" class="dict-list"></div>
+            </div>
         </div>
     </main>
+
+    <!-- 词表添加单词弹窗 -->
+    <div class="modal-overlay" id="savedAddModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>添加单词 — <span id="savedAddListName">词表</span></span>
+                <button class="modal-close" onclick="myCloseModal('savedAddModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <p class="tip">每行一个单词。用 word#释义 可指定自定义意思（# 后为释义，不查词典）；否则自动查词典，词典中不存在的单词会标记为失败</p>
+                <textarea id="savedAddInput" placeholder="例如：apple&#10;banana#香蕉&#10;book"></textarea>
+                <div id="savedAddFailed" class="add-failed hidden"></div>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                    <button onclick="submitSavedAddWords()">添加</button>
+                    <button class="danger" onclick="myCloseModal('savedAddModal')">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 词表添加到其他词表弹窗 -->
+    <div class="modal-overlay" id="savedMergeModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>添加到词表</span>
+                <button class="modal-close" onclick="myCloseModal('savedMergeModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <p class="tip">选择目标词表，将该词表的单词合并进去（按单词去重）</p>
+                <select id="savedMergeSelect" style="width:100%;margin-bottom:10px;"></select>
+                <div style="display: flex; gap: 8px; width: 100%;">
+                    <button onclick="doMergeToList()">添加到词表</button>
+                    <button onclick="myCloseModal('savedMergeModal')">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 通用对话框（确认/输入） -->
     <div class="app-dialog-overlay" id="appDialogOverlay" style="display:none;">
@@ -58,8 +101,8 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js"></script>
-    <script src="js/common.js?v=19"></script>
-    <script src="js/mylists.js?v=15"></script>
+    <script src="js/common.js?v=20"></script>
+    <script src="js/mylists.js?v=16"></script>
 </body>
 
 </html>
