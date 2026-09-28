@@ -2017,6 +2017,7 @@ input.spell-input {
 .save-to-dict-row {
     display: flex;
     gap: 8px;
+    margin-top: 0.35rem;
     margin-bottom: 10px;
     width: 100%;
 }
@@ -2084,5 +2085,28 @@ input.spell-input {
     }
     .saved-list-actions {
         justify-content: center;
+    }
+}
+
+.saved-add-list-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 0;
+    margin-top: 10px;
+    background-color: var(--bg-panel);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+.saved-add-list-card:hover {
+    background-color: rgba(255,255,255,.05);
+    color: var(--accent);
+}
+@media (max-width: 480px) {
+    .saved-add-list-card {
+        padding: 14px 0;
     }
 }
