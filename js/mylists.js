@@ -244,6 +244,188 @@ function createFromPresetTag(tag) {
     showToast('已创建词表"' + name + '"，共' + words.length + '个单词，可在背单词页查看', 'success');
 }
 
+// ---------- 我的词表区：背单词页"保存到我的词典"复制的词表 ----------
+// 词表仅有三个操作：添加单词、删除、添加到词表
+function myOpenModal(id) {
+    const m = document.getElementById(id);
+    if (m) { m.classList.add('visible'); document.body.style.overflow = 'hidden'; }
+}
+function myCloseModal(id) {
+    const m = document.getElementById(id);
+    if (m) { m.classList.remove('visible'); document.body.style.overflow = ''; }
+}
+
+function renderSavedLists() {
+    const container = document.getElementById('savedListContainer');
+    if (!container) return;
+    const data = getWordData();
+    if (!data) return;
+    const saved = data.lists.filter(l => l.savedToDict);
+    if (saved.length === 0) {
+        container.innerHTML = '<div class="saved-list-row" style="cursor:default;"><div class="saved-list-info">' +
+            '<span class="saved-list-count">暂无词表。可在背单词页「词表详细」中点击「保存到我的词典」复制词表到这里</span></div></div>';
+        return;
+    }
+    container.innerHTML = saved.map(list =>
+        '<div class="saved-list-row">' +
+        '  <div class="saved-list-info">' +
+        '    <span class="saved-list-name">' + escapeHtml(list.name) + '</span>' +
+        '    <span class="saved-list-count">' + list.words.length + ' 词</span>' +
+        '  </div>' +
+        '  <div class="saved-list-actions">' +
+        '    <button type="button" onclick="addWordsToList(\'' + list.id + '\')">添加单词</button>' +
+        '    <button type="button" onclick="showAddToListModal(\'' + list.id + '\')">添加到词表</button>' +
+        '    <button type="button" class="danger" onclick="deleteSavedList(\'' + list.id + '\')">删除</button>' +
+        '  </div>' +
+        '</div>'
+    ).join('');
+}
+
+// 删除词表副本（不影响背单词页原词表；若为最后一个词表则自动生成默认列表）
+function deleteSavedList(id) {
+    const data = getWordData();
+    const list = data.lists.find(l => l.id === id);
+    if (!list) return;
+    showConfirm('确定删除词表"' + list.name + '"吗？该词表下的所有单词将被删除，无法恢复！', () => {
+        data.lists = data.lists.filter(l => l.id !== id);
+        if (data.lists.length === 0) {
+            data.lists.push({
+                id: genListId(),
+                name: '默认列表',
+                words: [],
+                pendingWords: [],
+                selectedWord: null,
+                queueWords: []
+            });
+        }
+        if (!data.lists.some(l => l.id === data.activeListId)) data.activeListId = data.lists[0].id;
+        saveWordData(data);
+        renderSavedLists();
+        showToast('已删除词表"' + list.name + '"', 'success');
+    });
+}
+
+// 添加单词到词表（word#自定义意思 或查词典）
+let _savedAddTargetId = null;
+function addWordsToList(id) {
+    _savedAddTargetId = id;
+    const data = getWordData();
+    const list = data.lists.find(l => l.id === id);
+    const nameEl = document.getElementById('savedAddListName');
+    if (nameEl) nameEl.textContent = list ? list.name : '';
+    const input = document.getElementById('savedAddInput');
+    if (input) input.value = '';
+    const failed = document.getElementById('savedAddFailed');
+    if (failed) { failed.classList.add('hidden'); failed.innerHTML = ''; }
+    myOpenModal('savedAddModal');
+}
+
+async function submitSavedAddWords() {
+    const input = document.getElementById('savedAddInput');
+    const text = input ? input.value.trim() : '';
+    if (!text) { showToast('请输入单词内容', 'error'); return; }
+    const data = getWordData();
+    const list = data.lists.find(l => l.id === _savedAddTargetId);
+    if (!list) { showToast('词表不存在', 'error'); return; }
+
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const parsed = [];
+    lines.forEach(l => {
+        const idx = l.indexOf('#');
+        if (idx > 0) parsed.push({ word: l.substring(0, idx).trim(), custom: l.substring(idx + 1).trim() });
+        else parsed.push({ word: l, custom: '' });
+    });
+
+    const needLookup = parsed.filter(p => p.word && !p.custom);
+    let result = null;
+    if (needLookup.length > 0) {
+        const loaded = await isDictLoaded();
+        if (!loaded) {
+            showToast('词典未下载，请先到「我的词典」下载词典；或用 word#释义 填写自定义意思', 'error');
+            return;
+        }
+        result = await lookupWords(needLookup.map(p => p.word));
+    }
+
+    let addedCount = 0;
+    const failed = [];
+    parsed.forEach(p => {
+        if (!p.word) return;
+        let wordObj;
+        if (p.custom) {
+            wordObj = { word: p.word, mnemonic: null, customMeaning: normalizeNewlines(p.custom) };
+            wordObj.meaning = wordObj.customMeaning;
+        } else {
+            const entry = result.get(p.word.toLowerCase());
+            if (!entry) { failed.push(p.word); return; }
+            wordObj = { word: entry.word, mnemonic: null, phonetic: entry.phonetic || '' };
+            wordObj.meaning = normalizeNewlines(entry.translation || entry.definition || '(无释义)');
+        }
+        const isExist = list.words.some(w => w.word.toLowerCase() === wordObj.word.toLowerCase());
+        if (!isExist) { list.words.push(wordObj); addedCount++; }
+    });
+    list.words.sort((a, b) => a.word.localeCompare(b.word));
+    saveWordData(data);
+
+    const failedEl = document.getElementById('savedAddFailed');
+    if (failed.length > 0) {
+        failedEl.innerHTML = '<div class="add-failed-title">以下单词添加失败（词典中未找到）：</div>' +
+            '<div class="add-failed-words">' + failed.map(w => escapeHtml(w)).join('、') + '</div>';
+        failedEl.classList.remove('hidden');
+    } else if (failedEl) {
+        failedEl.classList.add('hidden');
+        failedEl.innerHTML = '';
+    }
+    showToast('已添加 ' + addedCount + ' 个单词' + (failed.length ? '，' + failed.length + ' 个失败' : ''), failed.length > 0 ? 'error' : 'success');
+    renderSavedLists();
+}
+
+// 添加到词表：把该词表的单词合并进目标词表（按单词去重）
+let _savedMergeFromId = null;
+function showAddToListModal(id) {
+    const data = getWordData();
+    const others = data.lists.filter(l => l.id !== id);
+    if (others.length === 0) { showToast('没有其他词表可添加', 'error'); return; }
+    _savedMergeFromId = id;
+    const sel = document.getElementById('savedMergeSelect');
+    if (sel) {
+        sel.innerHTML = others.map(l => '<option value="' + l.id + '">' + escapeHtml(l.name) + '（' + l.words.length + '词）</option>').join('');
+    }
+    myOpenModal('savedMergeModal');
+}
+
+function doMergeToList() {
+    const data = getWordData();
+    const sel = document.getElementById('savedMergeSelect');
+    const targetId = sel ? sel.value : '';
+    if (!targetId) { showToast('请选择目标词表', 'error'); return; }
+    const from = data.lists.find(l => l.id === _savedMergeFromId);
+    const target = data.lists.find(l => l.id === targetId);
+    if (!from || !target) { showToast('词表不存在', 'error'); return; }
+    const existing = new Set(target.words.map(w => w.word.toLowerCase()));
+    let added = 0;
+    from.words.forEach(w => {
+        if (!existing.has(w.word.toLowerCase())) {
+            const copy = {
+                word: w.word,
+                meaning: w.meaning || '',
+                mnemonic: w.mnemonic || null,
+                phonetic: w.phonetic || ''
+            };
+            target.words.push(copy);
+            target.pendingWords.push(copy);
+            existing.add(w.word.toLowerCase());
+            added++;
+        }
+    });
+    target.words.sort((a, b) => a.word.localeCompare(b.word));
+    target.pendingWords.sort((a, b) => a.word.localeCompare(b.word));
+    saveWordData(data);
+    myCloseModal('savedMergeModal');
+    showToast('已将「' + from.name + '」的 ' + added + ' 个单词添加到「' + target.name + '」', 'success');
+    renderSavedLists();
+}
+
 // 忙时禁用全部按钮并显示提示
 function setBusy(busy, text) {
     const tip = document.getElementById('dictBusyTip');
@@ -257,5 +439,9 @@ function setBusy(busy, text) {
 document.addEventListener('DOMContentLoaded', async () => {
     await initWordDataCache(); // 加载共享词表数据（无则创建默认词表）
     await renderDictList();
-    window.addEventListener('dictReady', async () => { await renderDictList(); });
+    renderSavedLists();
+    window.addEventListener('dictReady', async () => {
+        await renderDictList();
+        renderSavedLists();
+    });
 });

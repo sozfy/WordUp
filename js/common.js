@@ -353,7 +353,8 @@ async function initWordDataCache() {
             name: '默认词表',
             words: [],
             pendingWords: [],
-            selectedWord: null
+            selectedWord: null,
+            queueWords: []
         };
         _wordDataCache = { activeListId: defaultList.id, lists: [defaultList] };
         saveWordData(_wordDataCache);
