@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=113">
+    <link rel="stylesheet" href="css/style.css?v=114">
 </head>
 <body>
     <!--导航栏-->
@@ -47,6 +47,7 @@
         </div>
         <div class="sidebar-batch-bar" id="sidebarBatchBar">
             <button type="button" class="batch-toggle-btn" id="batchToggleBtn" onclick="toggleBatchDelete()">批量删除</button>
+            <button type="button" class="new-list-side-btn" onclick="openModal('newListModal')">添加词表</button>
         </div>
         <div class="sidebar-lists" id="sidebarLists">
             <!-- 列表项由 JS 动态渲染 -->
@@ -226,6 +227,24 @@
         </div>
     </div>
 
+    <!-- 单词详细弹窗 -->
+    <div class="modal-overlay" id="wordDetailModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>单词详细</span>
+                <button class="modal-close" onclick="closeModal('wordDetailModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="wd-word" id="wdWord"></div>
+                <div class="wd-phonetic" id="wdPhonetic"></div>
+                <div class="wd-source" id="wdSource"></div>
+                <div class="wd-section-title">完整释义</div>
+                <div class="wd-meaning" id="wdMeaning"></div>
+                <div class="wd-mnemonic hidden" id="wdMnemonic"></div>
+            </div>
+        </div>
+    </div>
+
     <!--中心-->
     <main class="main-content">
         <div class="container">
@@ -280,7 +299,7 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=3"></script>
-    <script src="js/script.js?v=35"></script>
+    <script src="js/script.js?v=36"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
