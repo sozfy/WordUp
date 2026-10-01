@@ -1,3 +1,7 @@
+/* ==========================================================
+   全局样式（四页共用：index / WordMemorizer / DictLookup / MyLists）
+   配色与主题变量集中在 :root，调整主题只需修改此处变量
+   ========================================================== */
 :root {
     /* 背景 */
     --bg-main: #3a3c44;
@@ -1971,22 +1975,25 @@ input.spell-input {
 .sidebar-batch-bar {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     flex: 0 0 auto;
 }
-.batch-toggle-btn {
+.batch-toggle-btn,
+.new-list-side-btn {
     flex: 0 0 auto;
     padding: 4px 10px;
     font-size: 0.8rem;
     margin: 0;
     background: transparent;
-    color: var(--highlight);
+    color: var(--danger);
     border: 1px solid var(--border);
     border-radius: 6px;
     cursor: pointer;
 }
-.batch-toggle-btn:hover {
+.batch-toggle-btn:hover,
+.new-list-side-btn:hover {
     background-color: var(--bg-panel);
 }
 .sidebar-list-item.batch-mode {
@@ -2109,4 +2116,42 @@ input.spell-input {
     .saved-add-list-card {
         padding: 14px 0;
     }
+}
+
+/* ---------- 单词详细弹窗 ---------- */
+.word-item {
+    cursor: pointer;
+}
+.wd-word {
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: var(--white);
+}
+.wd-phonetic {
+    margin-top: 4px;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+}
+.wd-source {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    opacity: .8;
+}
+.wd-section-title {
+    margin-top: 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.wd-meaning {
+    margin-top: 4px;
+    font-size: 1.05rem;
+    color: var(--success);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.wd-mnemonic {
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
 }
