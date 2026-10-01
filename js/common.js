@@ -1,4 +1,9 @@
 // ========== 共享功能 ==========
+// 职责：所有页面共享的基础能力（index / WordMemorizer / DictLookup / MyLists 均引用）
+//   - 词典目录 DICT_CATALOG 与词典导入（按词典独立存 IndexedDB：WordMemorizerDict_<id>）
+//   - 词表数据持久化（IndexedDB：WordMemorizerData/wordData，key='main'，保存时剥离 meaning）
+//   - 通用 UI：对话框（showDialog/showConfirm/showPrompt）、提示（showToast）
+//   - 存储用量统计、清除缓存（clearAllCache）
 
 // ---------- 全局词典（所有页面共享，从 IndexedDB 加载） ----------
 window.dictData = null;       // Map: word.toLowerCase() -> entry

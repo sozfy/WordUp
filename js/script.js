@@ -1,4 +1,8 @@
 // ========== 背单词核心逻辑 ==========
+// 职责：WordMemorizer.html 页面
+//   - 侧边栏词表管理（增删改查、拖动排序、批量删除、添加词表）
+//   - 随机抽词（普通 / 单轮循环 / 记忆队列）、认识/不认识判定、选择题模式
+//   - 单词详细弹窗、拆分/合并词表、Excel 导入（依赖 js/lib/xlsx.core.min.js）
 
 // ---------- 侧边栏菜单 ----------
 function openSidebar() {
@@ -181,7 +185,10 @@ function deleteList(id) {
     });
 }
 
+let _justDragged = false; // 拖动词表后短暂抑制随后的 click，避免拖动结束时误切换词表
+
 function switchList(id) {
+    if (_justDragged) { _justDragged = false; return; }
     const data = getWordData();
     if (data.activeListId === id) {
         closeSidebar();
@@ -244,6 +251,30 @@ function mergeList() {
     // 合并结束后对当前词表自动重置抽取记录
     applyResetDraw();
     showToast('已将"' + targetName + '"的单词合并到"' + current.name + '"，新增 ' + added + ' 个单词', 'success');
+}
+
+// ---------- 单词详细弹窗（点击"上一个单词"/当前单词/词表详细里的单词行查看完整释义） ----------
+function showWordDetail(word) {
+    const data = getWordData();
+    if (!data) return;
+    let hit = null;
+    data.lists.forEach(list => {
+        if (hit) return;
+        const w = (list.words || []).find(x => String(x.word).toLowerCase() === String(word).toLowerCase());
+        if (w) hit = { w: w, listName: list.name };
+    });
+    if (!hit) { showToast('未在词表中找到该单词', 'warning'); return; }
+    document.getElementById('wdWord').textContent = hit.w.word;
+    const phEl = document.getElementById('wdPhonetic');
+    if (hit.w.phonetic) { phEl.textContent = '/' + hit.w.phonetic + '/'; phEl.classList.remove('hidden'); }
+    else { phEl.textContent = ''; phEl.classList.add('hidden'); }
+    const meaning = hit.w.meaning || hit.w.customMeaning || '(无释义)';
+    document.getElementById('wdMeaning').textContent = normalizeNewlines(String(meaning));
+    const mnEl = document.getElementById('wdMnemonic');
+    if (hit.w.mnemonic) { mnEl.textContent = '助记：' + hit.w.mnemonic; mnEl.classList.remove('hidden'); }
+    else { mnEl.textContent = ''; mnEl.classList.add('hidden'); }
+    document.getElementById('wdSource').textContent = '来源词表：' + hit.listName;
+    openModal('wordDetailModal');
 }
 
 function viewListWords(id) {
@@ -435,6 +466,9 @@ function listDragEnd(e) {
         el.classList.remove('drag-over-before', 'drag-over-after');
     });
     _listDragFrom = -1;
+    // 拖动结束：短暂抑制随后的 click（防止拖动后误触发 switchList 切换词表）
+    _justDragged = true;
+    setTimeout(() => { _justDragged = false; }, 300);
 }
 
 function updateActiveListName() {
@@ -640,7 +674,7 @@ function renderWordList(wordArray) {
     let html = '';
     filtered.forEach((item, index) => {
         const meaning = item.meaning || (item.customMeaning ? normalizeNewlines(item.customMeaning) : '');
-        html += '<div class="word-item">';
+        html += '<div class="word-item" onclick="showWordDetail(' + jsQuoteStr(item.word) + ')">';
         html += '  <div class="word-item-text">';
         html += '    <span class="word-item-index">' + (index + 1) + '.</span>';
         html += '    <span class="word-item-word">' + escapeHtml(item.word) + '</span>';
@@ -650,7 +684,7 @@ function renderWordList(wordArray) {
             html += '    <span class="word-item-mean word-item-mean-loading">（释义加载中...）</span>';
         }
         html += '  </div>';
-        html += '  <button class="word-item-del" title="删除单词" onclick="deleteWordFromList(' + jsQuoteStr(item.word) + ')">';
+        html += '  <button class="word-item-del" title="删除单词" onclick="event.stopPropagation();deleteWordFromList(' + jsQuoteStr(item.word) + ')">';
         html += '    <svg viewBox="0 0 1024 1024" width="13" height="13" fill="currentColor"><path d="M563.8 512l262.5-312.9c4.4-5.2.7-13.1-6.1-13.1h-79.8c-4.7 0-9.2 2.1-12.3 5.7L511.6 449.8 295.1 191.7c-3-3.6-7.5-5.7-12.3-5.7H203c-6.8 0-10.5 7.9-6.1 13.1L459.4 512 196.9 824.9c-4.4 5.2-.7 13.1 6.1 13.1h79.8c4.7 0 9.2-2.1 12.3-5.7l216.5-258.1 216.5 258.1c3 3.6 7.5 5.7 12.3 5.7h79.8c6.8 0 10.5-7.9 6.1-13.1L563.8 512z"/></svg>';
         html += '  </button>';
         html += '</div>';
@@ -735,6 +769,7 @@ function deleteCurrentWord() {
         if (list2.selectedWord && list2.selectedWord.word.toLowerCase() === lower) list2.selectedWord = null;
         saveWordData(data2);
         drawWord(1); // selectedWord 已清空：跳过判定，直接抽取/显示下一个
+        updateRemainCount();
         showToast('已删除单词「' + word + '」', 'success');
     });
 }
@@ -910,6 +945,7 @@ function drawWord(num) {
         }
         // 记住本词表的上一个判定词，切换词表后仍可显示各自的上一个单词
         list.lastJudged = list.selectedWord.word + ' — ' + list.selectedWord.meaning;
+        list.lastJudgedWord = list.selectedWord.word;
         document.getElementById('lastWord').textContent = list.lastJudged;
     }
 
@@ -918,6 +954,7 @@ function drawWord(num) {
         list.selectedWord = null;
         saveWordData(data);
         const hasResult = (list.roundKnown || []).length + (list.roundUnknown || []).length > 0;
+        updateRemainCount();
         if (hasResult) {
             finishRound();
         } else {
@@ -945,6 +982,7 @@ function drawWord(num) {
         document.getElementById('checkButton1').disabled = true;
         document.getElementById('checkButton2').disabled = true;
         saveWordData(data);
+        updateRemainCount();
         return;
     }
 
@@ -970,6 +1008,7 @@ function drawWord(num) {
             document.getElementById('startButton').disabled = false;
             document.getElementById('checkButton1').disabled = true;
             document.getElementById('checkButton2').disabled = true;
+            updateRemainCount();
             return;
         }
         list.selectedWord = _memoryQueue.shift();
@@ -1001,6 +1040,7 @@ function drawWord(num) {
 
     // 单轮循环：本轮全部单词已抽完并显示（最后一个词刚显示），立即结束本轮弹出统计
     if (roundOn && !queueMode && list.pendingWords.length === 0) {
+        updateRemainCount();
         finishRound();
         return;
     }
@@ -1600,6 +1640,7 @@ function applyResetDraw() {
     list.selectedWord = null;
     list.pendingWords = [...list.words];
     list.lastJudged = null; // 先清空再保存，确保刷新后"上一个单词"不残留
+    list.lastJudgedWord = null;
     clearTimeout(_autoConfirmTimer); // 取消待定的自动跳转
     _memoryQueue = []; // 清空记忆队列
     list.queueWords = []; // 同步清空持久化队列引用
@@ -1657,6 +1698,7 @@ function clearAllWords() {
         list.pendingWords = [];
         list.selectedWord = null;
         list.lastJudged = null; // 先清空再保存，避免刷新后残留
+        list.lastJudgedWord = null;
         _memoryQueue = [];
         list.queueWords = [];
 
@@ -1772,6 +1814,24 @@ function clearAllWords() {
     // 应用选项设置后刷新选项区与详细设置行显隐
     createOptions();
     showOption();
+
+    // 点击"上一个单词"查看详细（弹窗，不再跳转查单词页）
+    const lastWordEl = document.getElementById('lastWord');
+    if (lastWordEl) {
+        lastWordEl.addEventListener('click', () => {
+            const list = getActiveList();
+            const w = list && (list.lastJudgedWord || (list.lastJudged ? list.lastJudged.split(' — ')[0] : ''));
+            if (w) showWordDetail(w);
+        });
+    }
+    // 点击当前显示单词查看详细（弹窗）
+    const curWordEl = document.getElementById('currentWord');
+    if (curWordEl) {
+        curWordEl.addEventListener('click', () => {
+            const list = getActiveList();
+            if (list && list.selectedWord) showWordDetail(list.selectedWord.word);
+        });
+    }
 
     // 绑定底部按钮事件
     const footerBtns = document.querySelectorAll('.footer-icon-btn');

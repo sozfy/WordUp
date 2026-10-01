@@ -1,4 +1,7 @@
 // ========== 词典查询逻辑 ==========
+// 职责：DictLookup.html 页面
+//   - 下拉框选择词典（默认"请选择词典"）
+//   - 查询：词典命中显示详情；未命中回退到用户词表（自定义词）；再无则前缀联想
 // 词典由 common.js 统一导入并按词典独立存于 IndexedDB（WordMemorizerDict_<id>），
 // 本页通过下拉框选择要查询的词典，查询直接读对应数据库，不加载全量到内存
 let _dictReady = false;          // 当前所选词典是否已导入
@@ -88,6 +91,15 @@ async function searchWord() {
         return;
     }
 
+    // 未选择词典或词典不可用时：先尝试从用户词表中查找（自定义词/词表词，如背单词页添加的 # 自定义意思）
+    if (!_currentDictId || !_dictReady) {
+        const listHit = await lookupWordInLists(word);
+        if (listHit) {
+            renderListWordResult(listHit);
+            return;
+        }
+    }
+
     if (!_currentDictId) {
         resultEl.innerHTML = '<div class="dict-empty">请先在下拉框选择要查询的词典</div>';
         return;
@@ -102,7 +114,15 @@ async function searchWord() {
     const entry = await lookupWord(word, _currentDictId);
     if (entry) {
         renderResult(entry);
-    } else {
+        return;
+    }
+    // 词典未命中：从用户词表中查找（自定义词/词表词，如背单词页添加的 # 自定义意思）
+    const listHit = await lookupWordInLists(word);
+    if (listHit) {
+        renderListWordResult(listHit);
+        return;
+    }
+    {
         // 尝试模糊匹配（前缀），按词频排序，词频高优先，跳过词频为0的
         const matches = await searchDictPrefix(word, 10, _currentDictId);
         if (matches.length > 0) {
@@ -116,6 +136,32 @@ async function searchWord() {
             resultEl.innerHTML = `<div class="dict-empty">未找到单词 "${word}"</div>`;
         }
     }
+}
+
+// 从用户词表中查找单词（自定义词/词表词，词典中查不到时兜底显示）
+async function lookupWordInLists(word) {
+    try { if (typeof initWordDataCache === 'function') await initWordDataCache(); } catch (e) { return null; }
+    if (typeof getWordData !== 'function') return null;
+    const data = getWordData();
+    if (!data) return null;
+    const lower = String(word).toLowerCase();
+    for (const list of data.lists) {
+        const w = (list.words || []).find(x => String(x.word).toLowerCase() === lower);
+        if (w) return { word: w.word, meaning: w.customMeaning || w.meaning || '', phonetic: w.phonetic || '', mnemonic: w.mnemonic || null, _listName: list.name };
+    }
+    return null;
+}
+
+// 渲染词表命中结果
+function renderListWordResult(hit) {
+    const resultEl = document.getElementById('dictResult');
+    const meaning = hit.meaning || '(无释义)';
+    let html = '<div class="dict-word">' + escapeHtml(hit.word) + '</div>';
+    if (hit.phonetic) html += '<div class="dict-phonetic">/' + escapeHtml(hit.phonetic) + '/</div>';
+    html += '<div class="dict-section-title">词表释义（来源：' + escapeHtml(hit._listName) + '）</div>';
+    html += '<div class="dict-translation">' + escapeHtml(normalizeNewlines(String(meaning))) + '</div>';
+    if (hit.mnemonic) html += '<div class="dict-section-title">助记</div><div class="dict-translation">' + escapeHtml(String(hit.mnemonic)) + '</div>';
+    resultEl.innerHTML = html;
 }
 
 // ---------- 渲染查询结果 ----------
