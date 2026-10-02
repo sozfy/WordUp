@@ -264,16 +264,19 @@ function showWordDetail(word) {
         if (w) hit = { w: w, listName: list.name };
     });
     if (!hit) { showToast('未在词表中找到该单词', 'warning'); return; }
-    document.getElementById('wdWord').textContent = hit.w.word;
-    const phEl = document.getElementById('wdPhonetic');
-    if (hit.w.phonetic) { phEl.textContent = '/' + hit.w.phonetic + '/'; phEl.classList.remove('hidden'); }
-    else { phEl.textContent = ''; phEl.classList.add('hidden'); }
+
+    // 渲染格式与查单词页结果一致（dict-word / dict-phonetic / dict-section-title / dict-translation）
+    let html = '';
+    html += '<div class="dict-word">' + escapeHtml(hit.w.word) + '</div>';
+    html += '<div class="dict-phonetic">' + (hit.w.phonetic ? '/' + escapeHtml(hit.w.phonetic) + '/' : '') + '</div>';
     const meaning = hit.w.meaning || hit.w.customMeaning || '(无释义)';
-    document.getElementById('wdMeaning').textContent = normalizeNewlines(String(meaning));
-    const mnEl = document.getElementById('wdMnemonic');
-    if (hit.w.mnemonic) { mnEl.textContent = '助记：' + hit.w.mnemonic; mnEl.classList.remove('hidden'); }
-    else { mnEl.textContent = ''; mnEl.classList.add('hidden'); }
-    document.getElementById('wdSource').textContent = '来源词表：' + hit.listName;
+    html += '<div class="dict-section-title">词表释义（来源：' + escapeHtml(hit.listName) + '）</div>';
+    html += '<div class="dict-translation">' + escapeHtml(normalizeNewlines(String(meaning))) + '</div>';
+    if (hit.w.mnemonic) {
+        html += '<div class="dict-section-title">助记</div>';
+        html += '<div class="dict-translation">' + escapeHtml(String(hit.w.mnemonic)) + '</div>';
+    }
+    document.getElementById('wdDetailContent').innerHTML = html;
     openModal('wordDetailModal');
 }
 
