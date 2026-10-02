@@ -1972,28 +1972,19 @@ input.spell-input {
 }
 
 /* ---------- 侧边栏批量删除 ---------- */
-.sidebar-batch-bar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border);
+.batch-toggle-btn {
     flex: 0 0 auto;
-}
-.batch-toggle-btn,
-.new-list-side-btn {
-    flex: 0 0 auto;
-    padding: 4px 10px;
-    font-size: 0.8rem;
+    padding: 3px 9px;
+    font-size: 0.75rem;
     margin: 0;
     background: transparent;
     color: var(--danger);
     border: 1px solid var(--border);
     border-radius: 6px;
     cursor: pointer;
+    white-space: nowrap;
 }
-.batch-toggle-btn:hover,
-.new-list-side-btn:hover {
+.batch-toggle-btn:hover {
     background-color: var(--bg-panel);
 }
 .sidebar-list-item.batch-mode {
@@ -2119,39 +2110,13 @@ input.spell-input {
 }
 
 /* ---------- 单词详细弹窗 ---------- */
+/* 弹窗内容由 showWordDetail 渲染，结构与查单词页结果一致（复用 dict-word / dict-phonetic / dict-section-title / dict-translation） */
 .word-item {
     cursor: pointer;
 }
-.wd-word {
-    font-size: 1.4rem;
-    font-weight: bold;
+#wordDetailModal .dict-word {
     color: var(--white);
 }
-.wd-phonetic {
-    margin-top: 4px;
-    font-size: 0.95rem;
-    color: var(--text-secondary);
-}
-.wd-source {
-    margin-top: 4px;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    opacity: .8;
-}
-.wd-section-title {
-    margin-top: 12px;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-}
-.wd-meaning {
-    margin-top: 4px;
-    font-size: 1.05rem;
+#wordDetailModal .dict-translation {
     color: var(--success);
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-.wd-mnemonic {
-    margin-top: 10px;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
 }
