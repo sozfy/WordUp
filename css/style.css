@@ -1979,13 +1979,12 @@ input.spell-input {
     margin: 0;
     background: transparent;
     color: var(--danger);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    border: none;
     cursor: pointer;
     white-space: nowrap;
 }
 .batch-toggle-btn:hover {
-    background-color: var(--bg-panel);
+    color: var(--danger-deep);
 }
 .sidebar-list-item.batch-mode {
     cursor: pointer;
