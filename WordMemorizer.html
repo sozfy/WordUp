@@ -6,9 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=116">
+    <link rel="stylesheet" href="css/style.css?v=121">
 </head>
 <body>
+<!-- 页面加载遮罩：加载完成前显示 -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">加载中</div>
+</div>
+
     <!--导航栏-->
     <header class="banner">
         <div class="bannerLeftBox">
@@ -183,11 +189,13 @@
             </div>
             <div class="modal-body">
                 <p class="tip">每行一个单词。用 word#释义 可指定自定义意思（# 后为释义，不查词典）；否则自动查词典，词典中不存在的单词会标记为失败</p>
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                    <button type="button" class="text-btn" onclick="triggerExcelImport()">从Excel导入</button>
+                </div>
                 <textarea id="wordInput" placeholder="例如：apple&#10;banana#香蕉&#10;book"></textarea>
                 <div id="addFailedList" class="add-failed hidden"></div>
                 <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
                     <button onclick="addWords()">添加单词</button>
-                    <button onclick="triggerExcelImport()">从Excel导入</button>
                     <button class="danger" onclick="clearAllWords()">清空当前词表</button>
                 </div>
                 <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none;" onchange="handleExcelFile(this.files[0])">
@@ -229,6 +237,7 @@
         <div class="modal">
             <div class="modal-header">
                 <span>单词详细</span>
+                <button class="word-detail-link" onclick="goToDictDetail()">查看详细</button>
                 <button class="modal-close" onclick="closeModal('wordDetailModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
@@ -282,7 +291,7 @@
     </main>
 
     <script src="js/lib/xlsx.core.min.js"></script>
-    <script src="js/common.js?v=20"></script>
+    <script src="js/common.js?v=22"></script>
     <script src="data/preset_zk.js"></script>
     <script src="data/preset_gk.js"></script>
     <script src="data/preset_cet4.js"></script>
@@ -292,7 +301,7 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js?v=3"></script>
-    <script src="js/script.js?v=37"></script>
+    <script src="js/script.js?v=43"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>

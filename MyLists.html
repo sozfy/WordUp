@@ -6,9 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>我的词典</title>
-    <link rel="stylesheet" href="css/style.css?v=116">
+    <link rel="stylesheet" href="css/style.css?v=121">
 </head>
 <body>
+<!-- 页面加载遮罩：加载完成前显示 -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">加载中</div>
+</div>
+
     <script>window.disableAutoDictImport = true;</script>
     <!--导航栏-->
     <header class="banner">
@@ -101,6 +107,20 @@
         </div>
     </div>
 
+    <!-- 词表查看弹窗：显示词表内的单词列表 -->
+    <div class="modal-overlay" id="savedViewModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>词表 — <span id="savedViewListName">词表</span></span>
+                <button class="modal-close" onclick="myCloseModal('savedViewModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="word-count" id="savedViewCount">单词总数：0</div>
+                <div id="savedViewDisplay"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- 通用对话框（确认/输入） -->
     <div class="app-dialog-overlay" id="appDialogOverlay" style="display:none;">
         <div class="app-dialog">
@@ -123,8 +143,8 @@
     <script src="data/preset_toefl.js"></script>
     <script src="data/preset_gre.js"></script>
     <script src="data/preset_data.js"></script>
-    <script src="js/common.js?v=20"></script>
-    <script src="js/mylists.js?v=17"></script>
+    <script src="js/common.js?v=22"></script>
+    <script src="js/mylists.js?v=20"></script>
 </body>
 
 </html>
