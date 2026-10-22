@@ -261,6 +261,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderDictSelect();
     setupSuggestions();
 
+    // 支持 ?word=xxx：从背单词弹窗「查看详细」跳转而来，自动填入输入框并查询
+    const params = new URLSearchParams(location.search);
+    const urlWord = params.get('word');
+    if (urlWord) {
+        const input = document.getElementById('searchInput');
+        if (input) {
+            input.value = urlWord;
+            searchWord();
+        }
+    }
+
     // 事件委托：点击带 data-word 的候选词时填入并查询
     document.addEventListener('click', (e) => {
         const item = e.target.closest('[data-word]');
@@ -274,6 +285,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     await refreshStatus();
+    hideLoading(); // 初始化完成，隐藏加载遮罩
     // 导入完成事件后刷新状态
     window.addEventListener('dictReady', refreshStatus);
 });

@@ -305,6 +305,8 @@ const WORD_DB_NAME = 'WordMemorizerData';
 const WORD_DB_STORE = 'wordData';
 const WORD_DB_VERSION = 1;
 const WORD_DB_KEY = 'main';
+// 「我的词典-词表」独立存储 key：与背单词词表（main）彻底分开
+const WORD_DB_KEY_SAVED = 'savedLists';
 
 function genListId() {
     return 'list_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -363,8 +365,113 @@ async function initWordDataCache() {
         };
         _wordDataCache = { activeListId: defaultList.id, lists: [defaultList] };
         saveWordData(_wordDataCache);
+    } else {
+        await migrateSavedLists(); // 旧版 savedToDict 词表迁移到独立 key
     }
     return _wordDataCache;
+}
+
+// 旧数据迁移：把 main 里标记 savedToDict 的词表搬到独立 key「savedLists」，并从背单词词表中移除
+async function migrateSavedLists() {
+    const data = _wordDataCache;
+    if (!data || !Array.isArray(data.lists)) return;
+    const saved = data.lists.filter(l => l.savedToDict);
+    if (saved.length === 0) return;
+    const savedData = (await loadSavedListsData()) || { lists: [] };
+    if (!Array.isArray(savedData.lists)) savedData.lists = [];
+    const existingIds = new Set(savedData.lists.map(l => l.id));
+    saved.forEach(l => {
+        if (!existingIds.has(l.id)) {
+            delete l.savedToDict; // 副本不再需要标记
+            savedData.lists.push(l);
+        }
+    });
+    // 迁移的词表剥离运行时 meaning 后写入
+    const strippedSaved = JSON.parse(JSON.stringify(savedData));
+    strippedSaved.lists.forEach(list => {
+        (list.words || []).forEach(w => { delete w.meaning; });
+        (list.pendingWords || []).forEach(w => { delete w.meaning; });
+        if (list.selectedWord) { delete list.selectedWord.meaning; }
+    });
+    await writeSavedListsData(strippedSaved);
+    // 从 main 移除 savedToDict 词表；若全部移空则生成默认词表
+    const rest = data.lists.filter(l => !l.savedToDict);
+    data.lists = rest.length > 0 ? rest : [{
+        id: genListId(),
+        name: '默认词表',
+        words: [],
+        pendingWords: [],
+        selectedWord: null,
+        queueWords: []
+    }];
+    if (!data.lists.some(l => l.id === data.activeListId)) data.activeListId = data.lists[0].id;
+    const stripped = JSON.parse(JSON.stringify(data));
+    stripped.lists.forEach(list => {
+        (list.words || []).forEach(w => { delete w.meaning; });
+        (list.pendingWords || []).forEach(w => { delete w.meaning; });
+        if (list.selectedWord) { delete list.selectedWord.meaning; }
+    });
+    await writeWordData(stripped);
+}
+
+// ---------- 「我的词典-词表」独立存储（key = savedLists，与背单词词表互不影响） ----------
+let _savedListsCache = null;
+
+// 读取「我的词典」词表数据
+async function loadSavedListsData() {
+    try {
+        const db = await openWordDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readonly');
+            const req = tx.objectStore(WORD_DB_STORE).get(WORD_DB_KEY_SAVED);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+// 写入「我的词典」词表数据（key = savedLists）
+async function writeSavedListsData(data) {
+    try {
+        const db = await openWordDB();
+        return await new Promise((resolve) => {
+            const tx = db.transaction(WORD_DB_STORE, 'readwrite');
+            const req = tx.objectStore(WORD_DB_STORE).put(data, WORD_DB_KEY_SAVED);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        });
+    } catch (e) {
+        return false;
+    }
+}
+
+// 初始化「我的词典」词表内存缓存（无数据则为空数组）
+async function initSavedListsCache() {
+    if (_savedListsCache) return _savedListsCache;
+    _savedListsCache = await loadSavedListsData();
+    if (!_savedListsCache) {
+        _savedListsCache = { lists: [] };
+        writeSavedListsData(_savedListsCache);
+    }
+    return _savedListsCache;
+}
+
+function getSavedListsData() {
+    return _savedListsCache || { lists: [] };
+}
+
+// 保存「我的词典」词表（剥离 meaning 后写入独立 key）
+function saveSavedListsData(data) {
+    _savedListsCache = data;
+    const stripped = JSON.parse(JSON.stringify(data));
+    (stripped.lists || []).forEach(list => {
+        (list.words || []).forEach(w => { delete w.meaning; });
+        (list.pendingWords || []).forEach(w => { delete w.meaning; });
+        if (list.selectedWord) { delete list.selectedWord.meaning; }
+    });
+    writeSavedListsData(stripped);
 }
 
 function getWordData() {
@@ -388,6 +495,16 @@ function getActiveList(data) {
     if (!d) return null;
     return d.lists.find(l => l.id === d.activeListId) || d.lists[0];
 }
+
+// ---------- 页面加载遮罩 ----------
+// 页面数据初始化完成后调用 hideLoading() 隐藏；window load 事件兜底（防初始化异常卡住页面）
+function hideLoading() {
+    const el = document.getElementById('loadingOverlay');
+    if (el) el.style.display = 'none';
+}
+window.addEventListener('load', () => {
+    hideLoading();
+});
 
 // 生成不重复的词表名称：已存在则加序号（中考、中考1、中考2...）
 // excludeId：改名场景下排除自身，避免改回原名被误判重名

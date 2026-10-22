@@ -276,8 +276,54 @@ function showWordDetail(word) {
         html += '<div class="dict-section-title">助记</div>';
         html += '<div class="dict-translation">' + escapeHtml(String(hit.w.mnemonic)) + '</div>';
     }
+    // 判定状态区（单轮循环标记：被标记为认识/不认识时，允许翻转标记）
+    const activeList = getActiveList();
+    if (activeList) {
+        const lower = String(word).toLowerCase();
+        const inKnown = (activeList.roundKnown || []).some(w => String(w).toLowerCase() === lower);
+        const inUnknown = (activeList.roundUnknown || []).some(w => String(w).toLowerCase() === lower);
+        if (inKnown || inUnknown) {
+            const stateText = inKnown ? '认识' : '不认识';
+            const btnText = inKnown ? '标记为不认识' : '标记为认识';
+            html += '<div class="dict-section-title">判定（单轮循环）</div>';
+            html += '<div class="dict-translation">当前标记：' + stateText + '</div>';
+            html += '<button class="word-mark-toggle" data-word="' + escapeHtml(String(word)) + '" onclick="toggleWordMark(this)">' + btnText + '</button>';
+        }
+    }
     document.getElementById('wdDetailContent').innerHTML = html;
+    window._detailWord = String(word); // 供弹窗右上角"查看详细"跳转查词典页使用
     openModal('wordDetailModal');
+}
+
+// 弹窗右上角"查看详细"：跳转查词典页（DictLookup.html?word=xxx），由该页自动填入输入框并查询
+function goToDictDetail() {
+    const word = window._detailWord;
+    if (!word) return;
+    location.href = 'DictLookup.html?word=' + encodeURIComponent(word);
+}
+
+// 弹窗内翻转单轮循环判定：认识 ↔ 不认识
+function toggleWordMark(btn) {
+    const word = btn.dataset.word;
+    const list = getActiveList();
+    if (!list || !word) return;
+    list.roundKnown = list.roundKnown || [];
+    list.roundUnknown = list.roundUnknown || [];
+    const lower = String(word).toLowerCase();
+    const inKnown = list.roundKnown.some(w => String(w).toLowerCase() === lower);
+    const inUnknown = list.roundUnknown.some(w => String(w).toLowerCase() === lower);
+    if (inKnown) {
+        list.roundKnown = list.roundKnown.filter(w => String(w).toLowerCase() !== lower);
+        if (!list.roundUnknown.some(w => String(w).toLowerCase() === lower)) list.roundUnknown.push(word);
+    } else if (inUnknown) {
+        list.roundUnknown = list.roundUnknown.filter(w => String(w).toLowerCase() !== lower);
+        if (!list.roundKnown.some(w => String(w).toLowerCase() === lower)) list.roundKnown.push(word);
+    } else {
+        return; // 未被标记时不动作（按钮仅在已标记时显示）
+    }
+    saveWordData(getWordData());
+    showWordDetail(word); // 重渲染弹窗，刷新状态与按钮
+    updateDraw();
 }
 
 function viewListWords(id) {
@@ -286,14 +332,21 @@ function viewListWords(id) {
     refreshMergeSelect();
 }
 
-// 将当前词表复制一份保存到「我的词典」（副本标记 savedToDict，在我的词典页"我的词表"区显示）
-function saveListToDict() {
+// 将当前词表复制一份保存到「我的词典」（写入独立 key savedLists，与背单词词表分开、互不影响）
+async function saveListToDict() {
     const data = getWordData();
     const list = getActiveList(data);
     if (!list) return;
+    const saved = await initSavedListsCache();
+    if (!Array.isArray(saved.lists)) saved.lists = [];
+    // 在「我的词典」词表内去重命名
+    const existingNames = new Set(saved.lists.map(l => l.name));
+    let name = list.name;
+    let seq = 1;
+    while (existingNames.has(name)) { name = list.name + seq; seq++; }
     const copy = {
         id: genListId(),
-        name: uniqueListName(list.name),
+        name: name,
         words: list.words.map(w => ({
             word: w.word,
             meaning: w.meaning || '',
@@ -303,10 +356,13 @@ function saveListToDict() {
         pendingWords: [],
         selectedWord: null,
         queueWords: [],
-        savedToDict: true
+        roundKnown: [],
+        roundUnknown: [],
+        lastJudged: null,
+        lastJudgedWord: null
     };
-    data.lists.push(copy);
-    saveWordData(data);
+    saved.lists.push(copy);
+    saveSavedListsData(saved);
     showToast('已复制到「我的词典」，可在我的词典页查看', 'success');
 }
 
@@ -1015,6 +1071,13 @@ function drawWord(num) {
             return;
         }
         list.selectedWord = _memoryQueue.shift();
+        // 保持队列恒为 n 个：出队后若待抽取还有词，补一个新词进队尾
+        // （认识 = 消费掉一个 → 队列短 1 → 补 1；不认识 = 放回队尾再 shift，长度不变 → 不补）
+        const targetN = getQueueSize();
+        while (_memoryQueue.length < targetN && list.pendingWords.length > 0) {
+            const idx = Math.floor(_rng() * list.pendingWords.length);
+            _memoryQueue.push(list.pendingWords.splice(idx, 1)[0]);
+        }
     } else {
         // 普通/单轮：抽新词（不能与上一个抽出的单词相同；若相同则从其余候选再抽）
         const prev = list.selectedWord; // 抽取前选中的词 = 上一个抽出的单词
@@ -1818,23 +1881,35 @@ function clearAllWords() {
     createOptions();
     showOption();
 
-    // 点击"上一个单词"查看详细（弹窗，不再跳转查单词页）
-    const lastWordEl = document.getElementById('lastWord');
-    if (lastWordEl) {
-        lastWordEl.addEventListener('click', () => {
-            const list = getActiveList();
-            const w = list && (list.lastJudgedWord || (list.lastJudged ? list.lastJudged.split(' — ')[0] : ''));
+    // 点击"上一个单词"/当前单词/当前意思 查看详细（弹窗，不再跳转查单词页）
+    // 同时监听 pointerup 与 click：移动端触摸环境下 click 可能丢失，pointerup 兜底；
+    // pointerup 先触发后，随后的 click 直接忽略，避免弹窗被打开两次
+    function bindWordDetailClick(el, getWord) {
+        if (!el) return;
+        let pending = false;
+        el.addEventListener('pointerup', () => {
+            pending = true;
+            const w = getWord();
+            if (w) showWordDetail(w);
+        });
+        el.addEventListener('click', () => {
+            if (pending) { pending = false; return; }
+            const w = getWord();
             if (w) showWordDetail(w);
         });
     }
-    // 点击当前显示单词查看详细（弹窗）
-    const curWordEl = document.getElementById('currentWord');
-    if (curWordEl) {
-        curWordEl.addEventListener('click', () => {
-            const list = getActiveList();
-            if (list && list.selectedWord) showWordDetail(list.selectedWord.word);
-        });
-    }
+    bindWordDetailClick(document.getElementById('lastWord'), () => {
+        const list = getActiveList();
+        return list && (list.lastJudgedWord || (list.lastJudged ? list.lastJudged.split(' — ')[0] : ''));
+    });
+    bindWordDetailClick(document.getElementById('currentWord'), () => {
+        const list = getActiveList();
+        return list && list.selectedWord ? list.selectedWord.word : '';
+    });
+    bindWordDetailClick(document.getElementById('currentMeaning'), () => {
+        const list = getActiveList();
+        return list && list.selectedWord ? list.selectedWord.word : '';
+    });
 
     // 绑定底部按钮事件
     const footerBtns = document.querySelectorAll('.footer-icon-btn');
@@ -1935,5 +2010,8 @@ function clearAllWords() {
         if (moved) { moved = false; return; }
         if (typeof toggleSidebar === 'function') toggleSidebar();
     });
+
+    // 页面初始化完成，隐藏加载遮罩
+    hideLoading();
 })();
 
