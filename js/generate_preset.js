@@ -1,4 +1,5 @@
 // 本地脚本：解析 ecdict.csv，按 tag 分类生成预设词表静态文件
+// 预设词表只保存单词，释义/音标由页面在导入时查词典补全
 // 运行：node generate_preset.js
 const fs = require('fs');
 const path = require('path');
@@ -46,7 +47,6 @@ console.log('解析 CSV...');
 const rows = parseCSV(text);
 const headers = rows[0].map(h => h.trim());
 const wordIdx = headers.indexOf('word');
-const transIdx = headers.indexOf('translation');
 const tagIdx = headers.indexOf('tag');
 
 const tagMap = {};
@@ -56,14 +56,11 @@ console.log('按 tag 分类中...');
 for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const word = row[wordIdx];
-    const translation = row[transIdx] || '';
     const tag = row[tagIdx] || '';
     if (!word || !tag) continue;
     const tags = tag.split(/\s+/);
     tags.forEach(t => {
-        if (tagMap[t]) {
-            tagMap[t].push({ word, translation });
-        }
+        if (tagMap[t]) tagMap[t].push(word);
     });
 }
 
@@ -74,7 +71,7 @@ const result = TAGS.map(t => ({
     words: tagMap[t]
 }));
 
-console.log('\n生成结果：');
+console.log('\n生成结果（仅单词，释义在页面导入时查词典补全）：');
 result.forEach(r => console.log('  ' + r.name + ': ' + r.count + ' 词'));
 
 const totalWords = result.reduce((s, r) => s + r.count, 0);

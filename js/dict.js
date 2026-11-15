@@ -6,6 +6,7 @@
 // 本页通过下拉框选择要查询的词典，查询直接读对应数据库，不加载全量到内存
 let _dictReady = false;          // 当前所选词典是否已导入
 let _currentDictId = '';         // 当前选中的词典 id（'' = 未选择，默认"请选择词典"）
+let _queryToken = 0;             // 查询/联想的序号，用于丢弃过期的异步结果
 
 // ---------- UI 更新 ----------
 function setDictStatus(text) {
@@ -16,35 +17,37 @@ function setDictStatus(text) {
     el.style.display = (text === '请选择词典') ? 'none' : '';
 }
 
+// 查询按钮可用状态（refreshStatus / onDictSelect / searchWord 共用）
+function setSearchEnabled(enabled) {
+    const btn = document.getElementById('searchBtn');
+    if (btn) btn.disabled = !enabled;
+}
+
+// 立即显示"加载中..."（切换词典/词典尚未就绪时的过渡状态）
+function showDictLoading() {
+    _dictReady = false;
+    setDictStatus('加载中...');
+    setSearchEnabled(false);
+}
+
 // ---------- 刷新当前词典状态（请选择词典 / 加载中... / 已加载 / 未下载） ----------
 async function refreshStatus() {
-    // 未选择词典
     if (!_currentDictId) {
         _dictReady = false;
         setDictStatus('请选择词典');
-        const searchBtn = document.getElementById('searchBtn');
-        if (searchBtn) searchBtn.disabled = true;
+        setSearchEnabled(false);
         return;
     }
-    // 导入进行中：显示"加载中..."
-    if (window.dictAutoImporting || window.dictLoading) {
-        _dictReady = false;
-        setDictStatus('加载中...');
-        const searchBtn = document.getElementById('searchBtn');
-        if (searchBtn) searchBtn.disabled = true;
+    if (window.dictAutoImporting) {
+        showDictLoading();
         return;
     }
-    const count = await countDictEntries(_currentDictId);
-    const searchBtn = document.getElementById('searchBtn');
-    if (count > 0) {
-        _dictReady = true;
-        setDictStatus('已加载');
-        if (searchBtn) searchBtn.disabled = false;
-    } else {
-        _dictReady = false;
-        setDictStatus('未下载');
-        if (searchBtn) searchBtn.disabled = true;
-    }
+    const id = _currentDictId;
+    const count = await countDictEntries(id);
+    if (id !== _currentDictId) return; // 等待期间用户又切换了词典/切回“请选择词典”
+    _dictReady = count > 0;
+    setDictStatus(_dictReady ? '已加载' : '未下载');
+    setSearchEnabled(_dictReady);
 }
 
 // ---------- 渲染词典下拉框（默认"请选择词典"） ----------
@@ -66,34 +69,30 @@ function onDictSelect() {
     if (resultEl) resultEl.innerHTML = '<div class="dict-empty">输入单词进行查询</div>';
     const suggestions = document.getElementById('suggestions');
     if (suggestions) suggestions.classList.add('hidden');
-    if (_currentDictId) {
-        _dictReady = false;
-        setDictStatus('加载中...');
-        const searchBtn = document.getElementById('searchBtn');
-        if (searchBtn) searchBtn.disabled = true;
-        refreshStatus();
-    } else {
-        refreshStatus();
-    }
+    if (_currentDictId) showDictLoading();
+    refreshStatus();
 }
 
 // ---------- 查询单词（按当前所选词典） ----------
 async function searchWord() {
     const input = document.getElementById('searchInput');
-    const word = input.value.trim().toLowerCase();
     const resultEl = document.getElementById('dictResult');
     const suggestions = document.getElementById('suggestions');
-
-    suggestions.classList.add('hidden');
+    if (!input || !resultEl) return;
+    const word = input.value.trim().toLowerCase();
+    if (suggestions) suggestions.classList.add('hidden');
 
     if (!word) {
         resultEl.innerHTML = '<div class="dict-empty">请输入要查询的单词</div>';
         return;
     }
 
-    // 未选择词典或词典不可用时：先尝试从用户词表中查找（自定义词/词表词，如背单词页添加的 # 自定义意思）
+    const token = ++_queryToken;
+
+    // 未选择词典或词典不可用时：先尝试从用户词表中查找（自定义词/词表词）
     if (!_currentDictId || !_dictReady) {
         const listHit = await lookupWordInLists(word);
+        if (token !== _queryToken) return;
         if (listHit) {
             renderListWordResult(listHit);
             return;
@@ -112,42 +111,58 @@ async function searchWord() {
 
     // 直接从当前词典的 IndexedDB 查询
     const entry = await lookupWord(word, _currentDictId);
+    if (token !== _queryToken) return;
     if (entry) {
         renderResult(entry);
         return;
     }
+
     // 词典未命中：从用户词表中查找（自定义词/词表词，如背单词页添加的 # 自定义意思）
     const listHit = await lookupWordInLists(word);
+    if (token !== _queryToken) return;
     if (listHit) {
         renderListWordResult(listHit);
         return;
     }
-    {
-        // 尝试模糊匹配（前缀），按词频排序，词频高优先，跳过词频为0的
-        const matches = await searchDictPrefix(word, 10, _currentDictId);
-        if (matches.length > 0) {
-            let html = `<div class="dict-empty">未找到 "${escapeHtml(word)}"，您是不是想找：</div><div style="margin-top:0.5rem;">`;
-            matches.forEach(m => {
-                html += `<div class="word-item" style="cursor:pointer;" data-word="${escapeHtml(m.word)}">${escapeHtml(m.word)} — ${escapeHtml((m.translation || '').substring(0, 50))}</div>`;
-            });
-            html += '</div>';
-            resultEl.innerHTML = html;
-        } else {
-            resultEl.innerHTML = `<div class="dict-empty">未找到单词 "${word}"</div>`;
-        }
+
+    // 仍未命中：做前缀联想（按词频排序，词频高优先，跳过词频为 0 的）
+    const matches = await searchDictPrefix(word, 10, _currentDictId);
+    if (token !== _queryToken) return;
+    if (matches.length === 0) {
+        resultEl.innerHTML = '<div class="dict-empty">未找到单词 "' + escapeHtml(word) + '"</div>';
+        return;
     }
+    let html = '<div class="dict-empty">未找到 "' + escapeHtml(word) + '"，您是不是想找：</div><div style="margin-top:0.5rem;">';
+    matches.forEach(m => {
+        const brief = flattenNewlines(m.translation || '').substring(0, 50);
+        html += '<div class="word-item" style="cursor:pointer;" data-word="' + escapeHtml(m.word) + '">' +
+            escapeHtml(m.word) + (brief ? ' — ' + escapeHtml(brief) : '') + '</div>';
+    });
+    html += '</div>';
+    resultEl.innerHTML = html;
 }
 
 // 从用户词表中查找单词（自定义词/词表词，词典中查不到时兜底显示）
 async function lookupWordInLists(word) {
-    try { if (typeof initWordDataCache === 'function') await initWordDataCache(); } catch (e) { return null; }
-    if (typeof getWordData !== 'function') return null;
+    try {
+        await initWordDataCache();
+    } catch (e) {
+        return null;
+    }
     const data = getWordData();
-    if (!data) return null;
+    if (!data || !Array.isArray(data.lists)) return null;
     const lower = String(word).toLowerCase();
     for (const list of data.lists) {
         const w = (list.words || []).find(x => String(x.word).toLowerCase() === lower);
-        if (w) return { word: w.word, meaning: w.customMeaning || w.meaning || '', phonetic: w.phonetic || '', mnemonic: w.mnemonic || null, _listName: list.name };
+        if (w) {
+            return {
+                word: w.word,
+                meaning: w.customMeaning || w.meaning || '',
+                phonetic: w.phonetic || '',
+                mnemonic: w.mnemonic || null,
+                _listName: list.name
+            };
+        }
     }
     return null;
 }
@@ -155,27 +170,30 @@ async function lookupWordInLists(word) {
 // 渲染词表命中结果
 function renderListWordResult(hit) {
     const resultEl = document.getElementById('dictResult');
+    if (!resultEl) return;
     const meaning = hit.meaning || '(无释义)';
     let html = '<div class="dict-word">' + escapeHtml(hit.word) + '</div>';
     if (hit.phonetic) html += '<div class="dict-phonetic">/' + escapeHtml(hit.phonetic) + '/</div>';
     html += '<div class="dict-section-title">词表释义（来源：' + escapeHtml(hit._listName) + '）</div>';
     html += '<div class="dict-translation">' + escapeHtml(normalizeNewlines(String(meaning))) + '</div>';
-    if (hit.mnemonic) html += '<div class="dict-section-title">助记</div><div class="dict-translation">' + escapeHtml(String(hit.mnemonic)) + '</div>';
+    if (hit.mnemonic) {
+        html += '<div class="dict-section-title">助记</div>';
+        html += '<div class="dict-translation">' + escapeHtml(String(hit.mnemonic)) + '</div>';
+    }
     resultEl.innerHTML = html;
 }
 
 // ---------- 渲染查询结果 ----------
 function renderResult(entry) {
     const resultEl = document.getElementById('dictResult');
+    if (!resultEl) return;
 
     let tagsHtml = '';
     const tags = formatTags(entry.tag);
     if (tags.length > 0) {
-        tagsHtml = '<div class="dict-tags">';
-        tags.forEach(t => {
-            tagsHtml += '<span class="dict-tag" title="' + escapeHtml(t.key) + '">' + escapeHtml(t.label) + '</span>';
-        });
-        tagsHtml += '</div>';
+        tagsHtml = '<div class="dict-tags">' + tags.map(t =>
+            '<span class="dict-tag" title="' + escapeHtml(t.key) + '">' + escapeHtml(t.label) + '</span>'
+        ).join('') + '</div>';
     }
 
     let html = '';
@@ -187,22 +205,18 @@ function renderResult(entry) {
         html += '<div class="dict-section-title">中文释义</div>';
         html += '<div class="dict-translation">' + escapeHtml(normalizeNewlines(entry.translation)) + '</div>';
     }
-
     if (entry.definition) {
         html += '<div class="dict-section-title">英文定义</div>';
         html += '<div class="dict-definition">' + escapeHtml(normalizeNewlines(entry.definition)) + '</div>';
     }
-
     if (entry.pos) {
         html += '<div class="dict-section-title">词性</div>';
         html += '<div class="dict-translation">' + escapeHtml(entry.pos) + '</div>';
     }
-
     if (entry.exchange) {
         html += '<div class="dict-section-title">时态变化</div>';
         html += '<div class="dict-translation">' + formatExchange(entry.exchange) + '</div>';
     }
-
     if (entry.collins || entry.oxford || entry.bnc || entry.frq) {
         html += '<div class="dict-section-title">词典信息</div><div class="dict-definition">';
         if (entry.collins) html += '柯林斯星级：' + escapeHtml(entry.collins) + '　';
@@ -211,9 +225,7 @@ function renderResult(entry) {
         if (entry.frq) html += '词频：' + escapeHtml(entry.frq);
         html += '</div>';
     }
-
     html += tagsHtml;
-
     resultEl.innerHTML = html;
 }
 
@@ -221,8 +233,10 @@ function renderResult(entry) {
 function setupSuggestions() {
     const input = document.getElementById('searchInput');
     const suggestions = document.getElementById('suggestions');
+    if (!input || !suggestions) return;
 
     let debounceTimer = null;
+    let requestToken = 0;
 
     input.addEventListener('input', () => {
         const val = input.value.trim().toLowerCase();
@@ -234,17 +248,19 @@ function setupSuggestions() {
         // 防抖：避免每次击键都触发数据库查询
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
+            const token = ++requestToken;
             const matches = await searchDictPrefix(val, 8, _currentDictId);
-            const topKeys = matches.map(m => m.word);
+            // 输入已变化时丢弃过期结果，避免联想列表“倒序覆盖”
+            if (token !== requestToken || input.value.trim().toLowerCase() !== val) return;
 
-            if (topKeys.length > 0) {
-                suggestions.innerHTML = topKeys.map(w =>
-                    `<div class="word-item" style="cursor:pointer;" data-word="${escapeHtml(w)}">${escapeHtml(w)}</div>`
-                ).join('');
-                suggestions.classList.remove('hidden');
-            } else {
+            if (matches.length === 0) {
                 suggestions.classList.add('hidden');
+                return;
             }
+            suggestions.innerHTML = matches.map(m =>
+                '<div class="word-item" style="cursor:pointer;" data-word="' + escapeHtml(m.word) + '">' + escapeHtml(m.word) + '</div>'
+            ).join('');
+            suggestions.classList.remove('hidden');
         }, 150);
     });
 

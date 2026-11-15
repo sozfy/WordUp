@@ -45,55 +45,58 @@ async function renderDictList() {
         '</div>' +
         // 行下方深色展开区（文档流内，展开时把下方内容往下推）
         '<div class="dict-preset-expand" id="presetExpand_' + dict.id + '" style="display:none;">' +
-        '  <div class="preset-tip">点击预设词表创建词表，可在背单词页查看</div>' +
+        '  <div class="preset-tip">点击预设词表创建词表（预设只存单词，创建时自动查词典补全释义与音标），可在背单词页查看</div>' +
         '  <div class="preset-chips">' + presetChips + '</div>' +
         '</div>';
     }).join('');
 
-    // 并行查询每本词典的下载状态
+    // 并行查询每本词典的下载状态：每本只查一次词条数（原先 isDictLoaded + countDictEntries 会查两次）
     await Promise.all(DICT_CATALOG.map(async (dict) => {
-        const loaded = await isDictLoaded(dict.id);
+        const count = await countDictEntries(dict.id);
         const row = container.querySelector('.dict-row[data-dict="' + dict.id + '"]');
-        if (!row) return;
-        const statusEl = row.querySelector('.dict-status');
-        const countEl = row.querySelector('.dict-count');
-        const reloadBtn = row.querySelector('.reload-icon');
-        const btns = row.querySelectorAll('.dict-actions button');
-        if (loaded) {
-            const cnt = await countDictEntries(dict.id);
-            statusEl.textContent = '已下载';
-            statusEl.classList.add('ok');
-            // "共 x / y 词"单独显示，不与"已下载"拼接：x 为实际条数，y 为目录应有数量
-            countEl.textContent = '共 ' + cnt.toLocaleString('en-US') + ' / ' + (dict.expectedCount || '') + ' 词';
-            // reload 在操作组外；actions 内：0=下载、1=删除
-            reloadBtn.disabled = false;  // 重新下载可用
-            btns[0].disabled = true;     // 下载禁用
-            btns[1].disabled = false;    // 删除可用
-        } else {
-            statusEl.textContent = '未下载';
-            countEl.textContent = '';
-            reloadBtn.disabled = true;   // 重新下载禁用（无数据可重下）
-            btns[0].disabled = false;    // 下载可用
-            btns[1].disabled = true;     // 删除禁用
-        }
+        if (row) applyDictRowState(row, dict, count);
     }));
 }
 
-// 下载并导入指定词典（复用 common.js 的导入链路，含进度提示）
-async function downloadDict(id) {
+// 按词条数量更新单行状态与按钮可用性
+function applyDictRowState(row, dict, count) {
+    const loaded = count > 0;
+    const statusEl = row.querySelector('.dict-status');
+    const countEl = row.querySelector('.dict-count');
+    const reloadBtn = row.querySelector('.reload-icon');
+    const btns = row.querySelectorAll('.dict-actions button');
+    if (statusEl) {
+        statusEl.textContent = loaded ? '已下载' : '未下载';
+        statusEl.classList.toggle('ok', loaded);
+    }
+    // "共 x / y 词"单独显示：x 为实际条数，y 为目录应有数量
+    if (countEl) {
+        countEl.textContent = loaded
+            ? '共 ' + count.toLocaleString('en-US') + ' / ' + (dict.expectedCount || '') + ' 词'
+            : '';
+    }
+    // actions 内：0=下载、1=删除
+    if (reloadBtn) reloadBtn.disabled = !loaded;
+    if (btns[0]) btns[0].disabled = loaded;
+    if (btns[1]) btns[1].disabled = !loaded;
+}
+
+// 下载 / 重新下载词典的共用流程（clearFirst = 先清空已有词条）
+async function importDictJob(id, clearFirst, busyText, successText, failureText) {
     if (_mylistsBusy) return;
     _mylistsBusy = true;
-    setBusy(true, '正在下载并导入词典（约需1-3分钟），请勿关闭页面...');
+    setBusy(true, busyText);
     try {
+        if (clearFirst) await clearDictStore(id);
         await autoImportDictFromCSV(id);
         if (await isDictLoaded(id)) {
-            showToast('词典下载完成', 'success');
+            showToast(successText, 'success');
         } else {
-            showToast('下载失败：未能获取词典文件，请检查网络后重试', 'error');
+            showToast(failureText, 'error');
         }
     } catch (e) {
-        console.warn('下载词典失败', e);
-        showToast('下载失败：' + e.message, 'error');
+        console.warn('词典导入失败', e);
+        showToast(failureText + '：' + (e && e.message ? e.message : e), 'error');
     } finally {
         _mylistsBusy = false;
         setBusy(false);
@@ -101,62 +104,41 @@ async function downloadDict(id) {
     }
 }
 
+// 下载并导入指定词典（复用 common.js 的导入链路，含进度提示）
+function downloadDict(id) {
+    return importDictJob(id, false,
+        '正在下载并导入词典（约需1-3分钟），请勿关闭页面...',
+        '词典下载完成',
+        '下载失败：未能获取词典文件，请检查网络后重试');
+}
+
 // 重新下载指定词典：清空该词典库并重新导入
 function reloadDict(id) {
     if (_mylistsBusy) return;
     const dict = getDictById(id);
-    showConfirm('将清空「' + dict.name + '」并重新下载（约需1-3分钟），是否继续？', async () => {
-        _mylistsBusy = true;
-        setBusy(true, '正在重新下载词典...');
-        try {
-            const db = await openDictDB(id);
-            await new Promise((resolve, reject) => {
-                const tx = db.transaction(DICT_STORE_WORDS, 'readwrite');
-                tx.objectStore(DICT_STORE_WORDS).clear();
-                tx.oncomplete = () => resolve();
-                tx.onerror = (e) => reject(e.target.error);
-            });
-            // 重置内存状态，强制重新导入
-            window.dictLoaded = false;
-            window.dictData = null;
-            window.dictLoading = false;
-            window.dictAutoImporting = false;
-            await autoImportDictFromCSV(id);
-            if (await isDictLoaded(id)) {
-                showToast('词典已重新下载', 'success');
-            } else {
-                showToast('重新下载失败：未能获取词典文件，请检查网络后重试', 'error');
-            }
-        } catch (e) {
-            console.warn('重新下载词典失败', e);
-            showToast('重新下载失败：' + e.message, 'error');
-        } finally {
-            _mylistsBusy = false;
-            setBusy(false);
-            await renderDictList();
-        }
+    showConfirm('将清空「' + dict.name + '」并重新下载（约需1-3分钟），是否继续？', () => {
+        importDictJob(id, true, '正在重新下载词典...', '词典已重新下载', '重新下载失败');
     });
 }
 
-// 删除指定词典（删除其 IndexedDB 库）
+// 删除指定词典（先断开本页缓存的数据库连接，再删除其 IndexedDB 库）
 function deleteDict(id) {
     if (_mylistsBusy) return;
     showConfirm('确定删除已下载的词典吗？删除后需重新下载才能查词。', async () => {
         _mylistsBusy = true;
         setBusy(true, '正在删除词典...');
         try {
+            await closeDB(dictDBName(id));
             await new Promise((resolve, reject) => {
                 const req = indexedDB.deleteDatabase(dictDBName(id));
                 req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
+                req.onerror = () => reject(req.error || new Error('删除失败'));
                 req.onblocked = () => reject(new Error('词典库删除被阻塞，请先关闭其他页面再试'));
             });
-            window.dictLoaded = false;
-            if (window.dictData) window.dictData.clear();
             showToast('词典已删除', 'success');
         } catch (e) {
             console.warn('删除词典失败', e);
-            showToast('删除失败：' + e.message, 'error');
+            showToast('删除失败：' + (e && e.message ? e.message : e), 'error');
         } finally {
             _mylistsBusy = false;
             setBusy(false);
@@ -214,8 +196,9 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// 点击预设词表项，创建词表并写入共享词表库（背单词页可看到）
-function createFromPresetTag(tag) {
+// 点击预设词表项：预设文件只存单词，创建词表时查词典补全释义与音标
+let _presetCreating = false;
+async function createFromPresetTag(tag) {
     if (!tag) return;
     const preset = getPresetListByTag(tag);
     if (!preset) {
@@ -227,24 +210,68 @@ function createFromPresetTag(tag) {
         showToast('词表数据尚未加载，请稍后重试', 'error');
         return;
     }
-    const words = preset.words.map(w => ({
-        word: w.word,
-        meaning: normalizeNewlines(w.translation || '(无释义)'),
-        mnemonic: null
-    }));
-    const name = uniqueListName(preset.name);
-    const newList = {
-        id: genListId(),
-        name: name,
-        words: words,
-        pendingWords: [...words],
-        selectedWord: null
-    };
-    data.lists.push(newList);
-    data.activeListId = newList.id;
-    saveWordData(data);
-    closeAllPresetPanels();
-    showToast('已创建词表"' + name + '"，共' + words.length + '个单词，可在背单词页查看', 'success');
+    if (_presetCreating) {
+        showToast('正在创建词表，请稍候…', 'warning');
+        return;
+    }
+
+    // 预设只存单词，没有词典就没有释义 → 未下载时先引导下载
+    const dictId = 'ecdict';
+    if (!(await isDictLoaded(dictId))) {
+        showToast('预设词表只存单词，需先在上方「已下载的词典」中下载 ECDICT 词典，导入时才能补全释义', 'warning');
+        return;
+    }
+
+    // 兼容两种结构：纯字符串数组（当前）与 {word, translation} 旧结构
+    const wordTexts = (preset.words || [])
+        .map(w => (typeof w === 'string' ? w : (w && w.word) || ''))
+        .map(w => String(w).trim())
+        .filter(Boolean);
+    if (wordTexts.length === 0) {
+        showToast('该预设词表为空', 'warning');
+        return;
+    }
+
+    _presetCreating = true;
+    try {
+        // 分批查词典（单批 1000 词），避免一次性发上万条 IndexedDB 请求
+        const BATCH = 1000;
+        const entries = new Map();
+        for (let i = 0; i < wordTexts.length; i += BATCH) {
+            const part = wordTexts.slice(i, i + BATCH);
+            const got = await lookupWords(part, dictId);
+            got.forEach((v, k) => entries.set(k, v));
+            if (wordTexts.length > BATCH) {
+                showToast('正在查词典补全「' + preset.name + '」：' +
+                    Math.min(i + BATCH, wordTexts.length) + '/' + wordTexts.length);
+            }
+        }
+
+        const words = wordTexts.map(w => {
+            const e = entries.get(w.toLowerCase());
+            return {
+                word: (e && e.word) || w,
+                mnemonic: null,
+                phonetic: (e && e.phonetic) || '',
+                meaning: e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)'
+            };
+        });
+
+        const newList = makeList(uniqueListName(preset.name), words);
+        data.lists.push(newList);
+        data.activeListId = newList.id;
+        saveWordData(data);
+        closeAllPresetPanels();
+
+        const missing = words.filter(w => w.meaning === '(无释义)').length;
+        showToast('已创建词表「' + newList.name + '」，共 ' + words.length + ' 个单词' +
+            (missing ? '，' + missing + ' 个词典未收录（可在背单词页手动补释义）' : '，释义已全部补全') +
+            '，可在背单词页查看', 'success');
+    } catch (e) {
+        showToast('创建失败：' + ((e && e.message) || '查询典出错，请重试'), 'error');
+    } finally {
+        _presetCreating = false;
+    }
 }
 
 // ---------- 我的词表区：背单词页"保存到我的词典"复制的词表 ----------
@@ -253,7 +280,7 @@ function createFromPresetTag(tag) {
 function showCreateSavedListModal() {
     const nameInput = document.getElementById('savedCreateName');
     if (nameInput) nameInput.value = '';
-    myOpenModal('savedCreateModal');
+    openModal('savedCreateModal');
 }
 function doCreateSavedList() {
     const saved = getSavedListsData();
@@ -261,36 +288,15 @@ function doCreateSavedList() {
     const nameInput = document.getElementById('savedCreateName');
     const name = (nameInput.value || '').trim();
     if (!name) { showToast('请输入词表名称', 'warning'); return; }
-    let finalName = name;
-    let seq = 2;
-    while (saved.lists.some(l => l.name === finalName)) { finalName = name + seq; seq++; }
-    const newList = {
-        id: genListId(),
-        name: finalName,
-        words: [],
-        pendingWords: [],
-        selectedWord: null,
-        queueWords: [],
-        roundKnown: [],
-        roundUnknown: [],
-        lastJudged: null,
-        lastJudgedWord: null
-    };
-    saved.lists.push(newList);
+    const finalName = uniqueListNameIn(name, saved.lists);
+    saved.lists.push(makeList(finalName));
     saveSavedListsData(saved);
-    myCloseModal('savedCreateModal');
+    closeModal('savedCreateModal');
     renderSavedLists();
-    showToast('已创建词表"' + finalName + '"', 'success');
+    showToast('已创建词表「' + finalName + '」', 'success');
 }
 
-function myOpenModal(id) {
-    const m = document.getElementById(id);
-    if (m) { m.classList.add('visible'); document.body.style.overflow = 'hidden'; }
-}
-function myCloseModal(id) {
-    const m = document.getElementById(id);
-    if (m) { m.classList.remove('visible'); document.body.style.overflow = ''; }
-}
+// 弹窗开关沿用 common.js 的 openModal / closeModal（与背单词页同一套行为）
 
 function renderSavedLists() {
     const container = document.getElementById('savedListContainer');
@@ -306,7 +312,7 @@ function renderSavedLists() {
         '<div class="saved-list-row">' +
         '  <div class="saved-list-info">' +
         '    <span class="saved-list-name">' + escapeHtml(list.name) + '</span>' +
-        '    <span class="saved-list-count">' + list.words.length + ' 词</span>' +
+        '    <span class="saved-list-count">' + (list.words || []).length + ' 词</span>' +
         '  </div>' +
         '  <div class="saved-list-actions">' +
         '    <button type="button" onclick="viewSavedList(\'' + list.id + '\')">查看</button>' +
@@ -318,17 +324,33 @@ function renderSavedLists() {
     ).join('');
 }
 
-// ---------- 查看词表：弹出词表单词列表 ----------
+// ---------- 查看词表：与背单词页词表详细一致（搜索 + 单词列表 + 删除 + 点击查看详情） ----------
 let _savedViewId = null;
+let _savedViewSearch = '';
+let _savedViewSearchTimer = null;
+
 function viewSavedList(id) {
     const saved = getSavedListsData();
     const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === id) : null;
     if (!list) { showToast('词表不存在', 'error'); return; }
     _savedViewId = id;
+    _savedViewSearch = '';
+    const searchEl = document.getElementById('savedViewSearch');
+    if (searchEl) searchEl.value = '';
     const nameEl = document.getElementById('savedViewListName');
     if (nameEl) nameEl.textContent = list.name;
-    myOpenModal('savedViewModal');
+    openModal('savedViewModal');
     renderSavedListView();
+}
+
+// 列表搜索（防抖：避免每次击键都重建整张列表）
+function onSavedViewSearch() {
+    clearTimeout(_savedViewSearchTimer);
+    _savedViewSearchTimer = setTimeout(() => {
+        const input = document.getElementById('savedViewSearch');
+        _savedViewSearch = input ? input.value : '';
+        renderSavedListView();
+    }, 120);
 }
 
 function renderSavedListView() {
@@ -337,39 +359,53 @@ function renderSavedListView() {
     const display = document.getElementById('savedViewDisplay');
     const count = document.getElementById('savedViewCount');
     if (!list || !display) return;
-    count.textContent = '单词总数：' + list.words.length;
-    if (list.words.length === 0) {
-        display.innerHTML = '<div class="word-item">暂无单词</div>';
-        return;
+    // 与背单词页共用同一套列表渲染（排序 / 搜索 / 删除按钮 / 点击查看详情）
+    const markup = buildWordListMarkup(list.words || [], _savedViewSearch, 'deleteWordFromSavedList');
+    if (count) count.textContent = markup.countText;
+    display.innerHTML = markup.html;
+    // 补查缺失释义（词典链接单词），完成后若弹窗仍打开则刷新
+    if (markup.missing.length > 0) {
+        fillMissingMeanings(markup.missing).then(() => {
+            const modal = document.getElementById('savedViewModal');
+            if (modal && modal.classList.contains('visible')) renderSavedListView();
+        });
     }
-    const sorted = list.words.slice().sort((a, b) => String(a.word).toLowerCase().localeCompare(String(b.word).toLowerCase()));
-    let html = '';
-    sorted.forEach((item, index) => {
-        const meaning = item.meaning || (item.customMeaning ? normalizeNewlines(item.customMeaning) : '');
-        html += '<div class="word-item">';
-        html += '  <div class="word-item-text">';
-        html += '    <span class="word-item-index">' + (index + 1) + '.</span>';
-        html += '    <span class="word-item-word">' + escapeHtml(item.word) + '</span>';
-        html += '    <span class="word-item-mean">' + (meaning ? '—— ' + escapeHtml(meaning) : '') + '</span>';
-        html += '  </div>';
-        html += '</div>';
-    });
-    display.innerHTML = html;
-    ensureSavedViewMeanings(sorted);
 }
 
-// 异步补查缺失释义（词典链接单词），完成后若弹窗仍打开则刷新
-async function ensureSavedViewMeanings(wordArray) {
-    const missing = wordArray.filter(item => !item.meaning && !item.customMeaning);
-    if (missing.length === 0) return;
-    let entries;
-    try { entries = await lookupWords(missing.map(m => m.word)); } catch (e) { entries = new Map(); }
-    missing.forEach(item => {
-        const e = entries.get(String(item.word).toLowerCase());
-        item.meaning = e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)';
+// 从「我的词典」词表删除单个单词（同步清理待抽取 / 选中 / 记忆队列，规则与背单词页一致）
+function deleteWordFromSavedList(word) {
+    const saved = getSavedListsData();
+    const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === _savedViewId) : null;
+    if (!list) return;
+    const lower = String(word).toLowerCase();
+    const target = (list.words || []).find(w => String(w.word).toLowerCase() === lower);
+    if (!target) return;
+    showConfirm('确定要从「' + list.name + '」中删除单词「' + target.word + '」吗？', () => {
+        list.words = list.words.filter(w => String(w.word).toLowerCase() !== lower);
+        if (Array.isArray(list.pendingWords)) {
+            list.pendingWords = list.pendingWords.filter(w => String(w.word).toLowerCase() !== lower);
+        }
+        if (list.selectedWord && String(list.selectedWord.word).toLowerCase() === lower) list.selectedWord = null;
+        if (Array.isArray(list.queueWords)) {
+            list.queueWords = list.queueWords.filter(w => String(w.word).toLowerCase() !== lower);
+        }
+        saveSavedListsData(saved);
+        renderSavedListView();
+        renderSavedLists();
+        showToast('已删除单词「' + target.word + '」', 'success');
     });
-    const modal = document.getElementById('savedViewModal');
-    if (modal && modal.classList.contains('visible')) renderSavedListView();
+}
+
+// 点击列表中的单词查看详细（与背单词页同一版式，但无单轮判定区）
+function showWordDetail(word) {
+    const saved = getSavedListsData();
+    const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === _savedViewId) : null;
+    if (!list) { showToast('未在词表中找到该单词', 'warning'); return; }
+    const w = (list.words || []).find(x => String(x.word).toLowerCase() === String(word).toLowerCase());
+    if (!w) { showToast('未在词表中找到该单词', 'warning'); return; }
+    document.getElementById('wdDetailContent').innerHTML = buildWordDetailHtml(w, list.name);
+    window._detailWord = String(word);
+    openModal('wordDetailModal');
 }
 
 // 删除「我的词典」词表副本（不影响背单词页原词表）
@@ -398,67 +434,95 @@ function addWordsToList(id) {
     if (input) input.value = '';
     const failed = document.getElementById('savedAddFailed');
     if (failed) { failed.classList.add('hidden'); failed.innerHTML = ''; }
-    myOpenModal('savedAddModal');
+    openModal('savedAddModal');
 }
 
 async function submitSavedAddWords() {
     const input = document.getElementById('savedAddInput');
-    const text = input ? input.value.trim() : '';
-    if (!text) { showToast('请输入单词内容', 'error'); return; }
+    const parsed = parseWordInput(input ? input.value : '');
+    if (parsed.length === 0) { showToast('请输入单词内容', 'error'); return; }
     const saved = getSavedListsData();
     const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === _savedAddTargetId) : null;
     if (!list) { showToast('词表不存在', 'error'); return; }
 
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    const parsed = [];
-    lines.forEach(l => {
-        const idx = l.indexOf('#');
-        if (idx > 0) parsed.push({ word: l.substring(0, idx).trim(), custom: l.substring(idx + 1).trim() });
-        else parsed.push({ word: l, custom: '' });
-    });
-
-    const needLookup = parsed.filter(p => p.word && !p.custom);
-    let result = null;
-    if (needLookup.length > 0) {
-        const loaded = await isDictLoaded();
-        if (!loaded) {
-            showToast('词典未下载，请先到「我的词典」下载词典；或用 word#释义 填写自定义意思', 'error');
-            return;
-        }
-        result = await lookupWords(needLookup.map(p => p.word));
+    // 与背单词页共用同一套解析 / 查词逻辑（word#释义 直接使用，其余查词典）
+    const { words, failed, dictMissing } = await buildWordObjects(parsed);
+    if (dictMissing) {
+        showToast('词典未下载，请先到「我的词典」下载词典；或用 word#释义 填写自定义意思', 'error');
+        return;
     }
 
-    let addedCount = 0;
-    const failed = [];
-    parsed.forEach(p => {
-        if (!p.word) return;
-        let wordObj;
-        if (p.custom) {
-            wordObj = { word: p.word, mnemonic: null, customMeaning: normalizeNewlines(p.custom) };
-            wordObj.meaning = wordObj.customMeaning;
-        } else {
-            const entry = result.get(p.word.toLowerCase());
-            if (!entry) { failed.push(p.word); return; }
-            wordObj = { word: entry.word, mnemonic: null, phonetic: entry.phonetic || '' };
-            wordObj.meaning = normalizeNewlines(entry.translation || entry.definition || '(无释义)');
-        }
-        const isExist = list.words.some(w => w.word.toLowerCase() === wordObj.word.toLowerCase());
-        if (!isExist) { list.words.push(wordObj); addedCount++; }
-    });
+    // 与背单词页共用同一套追加逻辑（按单词去重，words / pendingWords 同步）
+    const addedCount = appendWordsToList(list, words);
     list.words.sort((a, b) => a.word.localeCompare(b.word));
+    list.pendingWords.sort((a, b) => a.word.localeCompare(b.word));
     saveSavedListsData(saved);
+    if (input) input.value = '';
 
-    const failedEl = document.getElementById('savedAddFailed');
-    if (failed.length > 0) {
-        failedEl.innerHTML = '<div class="add-failed-title">以下单词添加失败（词典中未找到）：</div>' +
-            '<div class="add-failed-words">' + failed.map(w => escapeHtml(w)).join('、') + '</div>';
-        failedEl.classList.remove('hidden');
-    } else if (failedEl) {
-        failedEl.classList.add('hidden');
-        failedEl.innerHTML = '';
-    }
-    showToast('已添加 ' + addedCount + ' 个单词' + (failed.length ? '，' + failed.length + ' 个失败' : ''), failed.length > 0 ? 'error' : 'success');
+    renderAddFailed('savedAddFailed', failed);
+    showToast('成功添加' + addedCount + '个新单词' + (failed.length ? '，' + failed.length + '个失败' : ''),
+        failed.length > 0 ? 'error' : 'success');
     renderSavedLists();
+    if (isSavedViewOpen()) renderSavedListView();
+}
+
+// ---------- 从 Excel/CSV 导入单词（与背单词页共用导入逻辑） ----------
+function triggerSavedExcelImport() {
+    const input = document.getElementById('savedExcelFileInput');
+    if (input) input.click();
+}
+
+async function handleSavedExcelFile(file) {
+    if (!file) return;
+    const saved = getSavedListsData();
+    const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === _savedAddTargetId) : null;
+    if (!list) { showToast('词表不存在', 'error'); return; }
+    let result;
+    try {
+        result = await importWordsFromFile(file, list);
+    } catch (e) {
+        console.warn('导入词表文件失败', e);
+        showToast(e && e.message ? e.message : '读取文件失败', 'error');
+        return;
+    }
+    // 允许再次选择同一文件触发导入
+    const input = document.getElementById('savedExcelFileInput');
+    if (input) input.value = '';
+    if (result.added === 0) {
+        showToast('未导入任何单词（请检查第 1 列为单词、第 2 列为意思）', 'error');
+        return;
+    }
+    saveSavedListsData(saved);
+    renderSavedLists();
+    if (isSavedViewOpen()) renderSavedListView();
+    showToast('成功导入 ' + result.added + ' 个单词' + (result.skipped ? '，跳过 ' + result.skipped + ' 个' : ''), 'success');
+}
+
+// 清空当前词表（保留词表本身）
+function clearSavedListWords() {
+    const saved = getSavedListsData();
+    const list = saved && Array.isArray(saved.lists) ? saved.lists.find(l => l.id === _savedAddTargetId) : null;
+    if (!list) { showToast('词表不存在', 'error'); return; }
+    if ((list.words || []).length === 0) { showToast('词表已经是空的', 'warning'); return; }
+    showConfirm('确定清空「' + list.name + '」中的全部单词吗？此操作无法恢复！', () => {
+        // 与背单词页清空词表保持同一规则：连同待抽取队列 / 选中单词 / 记忆队列 / 单轮判定一并清空
+        list.words = [];
+        list.pendingWords = [];
+        list.selectedWord = null;
+        list.queueWords = [];
+        list.roundKnown = [];
+        list.roundUnknown = [];
+        saveSavedListsData(saved);
+        renderSavedLists();
+        if (isSavedViewOpen()) renderSavedListView();
+        showToast('已清空词表「' + list.name + '」', 'success');
+    });
+}
+
+// 查看弹窗是否打开（用于添加/导入/删除后联动刷新）
+function isSavedViewOpen() {
+    const modal = document.getElementById('savedViewModal');
+    return !!(modal && modal.classList.contains('visible'));
 }
 
 // 添加到词表：把该词表的单词合并进另一个「我的词典」词表（按单词去重）
@@ -471,9 +535,9 @@ function showAddToListModal(id) {
     _savedMergeFromId = id;
     const sel = document.getElementById('savedMergeSelect');
     if (sel) {
-        sel.innerHTML = others.map(l => '<option value="' + l.id + '">' + escapeHtml(l.name) + '（' + l.words.length + '词）</option>').join('');
+        sel.innerHTML = others.map(l => '<option value="' + l.id + '">' + escapeHtml(l.name) + '（' + (l.words || []).length + '词）</option>').join('');
     }
-    myOpenModal('savedMergeModal');
+    openModal('savedMergeModal');
 }
 
 function doMergeToList() {
@@ -485,26 +549,29 @@ function doMergeToList() {
     const from = saved.lists.find(l => l.id === _savedMergeFromId);
     const target = saved.lists.find(l => l.id === targetId);
     if (!from || !target) { showToast('词表不存在', 'error'); return; }
-    const existing = new Set(target.words.map(w => w.word.toLowerCase()));
+    if (!Array.isArray(from.words)) from.words = [];
+    if (!Array.isArray(target.words)) target.words = [];
+    if (!Array.isArray(target.pendingWords)) target.pendingWords = [];
+    const existing = new Set(target.words.map(w => String(w.word).toLowerCase()));
     let added = 0;
     from.words.forEach(w => {
-        if (!existing.has(w.word.toLowerCase())) {
-            const copy = {
-                word: w.word,
-                meaning: w.meaning || '',
-                mnemonic: w.mnemonic || null,
-                phonetic: w.phonetic || ''
-            };
-            target.words.push(copy);
-            target.pendingWords.push(copy);
-            existing.add(w.word.toLowerCase());
-            added++;
-        }
+        const key = String(w.word).toLowerCase();
+        if (existing.has(key)) return;
+        const copy = {
+            word: w.word,
+            meaning: w.meaning || '',
+            mnemonic: w.mnemonic || null,
+            phonetic: w.phonetic || ''
+        };
+        target.words.push(copy);
+        target.pendingWords.push(copy);
+        existing.add(key);
+        added++;
     });
     target.words.sort((a, b) => a.word.localeCompare(b.word));
     target.pendingWords.sort((a, b) => a.word.localeCompare(b.word));
     saveSavedListsData(saved);
-    myCloseModal('savedMergeModal');
+    closeModal('savedMergeModal');
     showToast('已将「' + from.name + '」的 ' + added + ' 个单词添加到「' + target.name + '」', 'success');
     renderSavedLists();
 }
