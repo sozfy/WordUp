@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <!-- 我的词典页：词典下载/删除 + 词表管理（js/mylists.js） -->
@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
     <title>我的词典</title>
-    <link rel="stylesheet" href="css/style.css?v=121">
+    <link rel="stylesheet" href="css/style.css?v=127">
 </head>
 <body>
 <!-- 页面加载遮罩：加载完成前显示 -->
@@ -25,9 +25,13 @@
             <span class="banner-divider"></span>
             <a href="./WordMemorizer.html" class="nav-link">背单词</a>
             <a href="./DictLookup.html" class="nav-link">查单词</a>
-            <a href="./MyLists.html" class="nav-link">我的词典</a>
         </div>
-        <button type="button" class="clear-cache-btn" onclick="clearAllCache()">清除缓存</button>
+        <a href="./User.html" class="nav-user-btn" title="用户" aria-label="用户">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="7.8" r="3.6"></circle>
+                <path d="M4.8 20c0-3.55 3.22-5.6 7.2-5.6s7.2 2.05 7.2 5.6"></path>
+            </svg>
+        </a>
     </header>
 
     <!--中心-->
@@ -36,14 +40,14 @@
 
             <div class="section">
                 <h3>已下载的词典</h3>
-                <p class="tip">未下载的词典可点击「下载」获取；已下载的词典可点击「删除」移除，删除后需重新下载才能查词。</p>
+                <p class="tip">未下载的词典可点击「下载」获取；已下载的词典可点击「删除」移除，删除后需重新下载才能查词。预设词表只存单词，创建词表时需用词典补全释义，请先下载词典。</p>
                 <div id="dictList" class="dict-list"></div>
                 <div id="dictBusyTip" class="dict-busy-tip"></div>
             </div>
 
-            <div class="section my-lists-section">
+            <div class="section my-lists-section" id="myListsSection">
                 <h3>我的词表</h3>
-                <p class="tip">从背单词页「词表详细 → 保存到我的词典」复制的词表会显示在这里，与背单词页的词表互相独立。</p>
+                <p class="tip">从背单词页「词表详细」→「保存到我的词典」复制的词表会显示在这里，与背单词页的词表互相独立。</p>
                 <div id="savedListContainer" class="dict-list"></div>
                 <div class="saved-add-list-card" onclick="showCreateSavedListModal()" title="新建词表">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"></path></svg>
@@ -57,34 +61,39 @@
         <div class="modal">
             <div class="modal-header">
                 <span>新建词表</span>
-                <button class="modal-close" onclick="myCloseModal('savedCreateModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+                <button class="modal-close" onclick="closeModal('savedCreateModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
                 <p class="tip">输入词表名称，创建后出现在「我的词表」中</p>
                 <input type="text" id="savedCreateName" placeholder="词表名称" style="width:100%;box-sizing:border-box;margin-bottom:10px;">
                 <div style="display: flex; gap: 8px; width: 100%;">
                     <button onclick="doCreateSavedList()">创建</button>
-                    <button onclick="myCloseModal('savedCreateModal')">取消</button>
+                    <button onclick="closeModal('savedCreateModal')">取消</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 词表添加单词弹窗 -->
+    <!-- 词表添加单词弹窗：与背单词页「添加单词」一致（文本添加 / 失败提示 / Excel 导入 / 清空词表） -->
     <div class="modal-overlay" id="savedAddModal">
         <div class="modal">
             <div class="modal-header">
                 <span>添加单词 — <span id="savedAddListName">词表</span></span>
-                <button class="modal-close" onclick="myCloseModal('savedAddModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+                <button class="modal-close" onclick="closeModal('savedAddModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
                 <p class="tip">每行一个单词。用 word#释义 可指定自定义意思（# 后为释义，不查词典）；否则自动查词典，词典中不存在的单词会标记为失败</p>
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 6px;">
+                    <button type="button" class="text-btn" onclick="triggerSavedExcelImport()">从Excel导入</button>
+                </div>
                 <textarea id="savedAddInput" placeholder="例如：apple&#10;banana#香蕉&#10;book"></textarea>
                 <div id="savedAddFailed" class="add-failed hidden"></div>
-                <div style="display: flex; gap: 8px; width: 100%;">
-                    <button onclick="submitSavedAddWords()">添加</button>
-                    <button class="danger" onclick="myCloseModal('savedAddModal')">取消</button>
+                <div style="display: flex; gap: 8px; width: 100%; flex-wrap: wrap;">
+                    <button onclick="submitSavedAddWords()">添加单词</button>
+                    <button class="danger" onclick="clearSavedListWords()">清空当前词表</button>
                 </div>
+                <input type="file" id="savedExcelFileInput" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none;" onchange="handleSavedExcelFile(this.files[0])">
+                <p class="tip excel-tip">Excel/CSV 导入格式：第 1 列单词、第 2 列意思，第 3 列助记、第 4 列音标（均可选，允许为空）</p>
             </div>
         </div>
     </div>
@@ -94,29 +103,47 @@
         <div class="modal">
             <div class="modal-header">
                 <span>添加到词表</span>
-                <button class="modal-close" onclick="myCloseModal('savedMergeModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+                <button class="modal-close" onclick="closeModal('savedMergeModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
                 <p class="tip">选择目标词表，将该词表的单词合并进去（按单词去重）</p>
                 <select id="savedMergeSelect" style="width:100%;margin-bottom:10px;"></select>
                 <div style="display: flex; gap: 8px; width: 100%;">
                     <button onclick="doMergeToList()">添加到词表</button>
-                    <button onclick="myCloseModal('savedMergeModal')">取消</button>
+                    <button onclick="closeModal('savedMergeModal')">取消</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 词表查看弹窗：显示词表内的单词列表 -->
+    <!-- 词表查看弹窗：与背单词页「单词列表」一致（单词总数 / 搜索 / 单词列表），不含拆分与合并 -->
     <div class="modal-overlay" id="savedViewModal">
         <div class="modal">
             <div class="modal-header">
-                <span>词表 — <span id="savedViewListName">词表</span></span>
-                <button class="modal-close" onclick="myCloseModal('savedViewModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+                <span>单词列表 — <span id="savedViewListName">词表</span></span>
+                <button class="modal-close" onclick="closeModal('savedViewModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
             </div>
             <div class="modal-body">
                 <div class="word-count" id="savedViewCount">单词总数：0</div>
-                <div id="savedViewDisplay"></div>
+                <div class="word-search-row">
+                    <input type="text" id="savedViewSearch" placeholder="搜索单词或释义" oninput="onSavedViewSearch()">
+                </div>
+                <div class="word-list" id="savedViewDisplay">暂无单词</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 单词详细弹窗：与背单词页同一版式 -->
+    <div class="modal-overlay" id="wordDetailModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>单词详细</span>
+                <button class="word-detail-link" onclick="goToDictDetail()">查看详细</button>
+                <button class="modal-close" onclick="closeModal('wordDetailModal')"><svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M2.59 2.72l.06-.07a.5.5 0 01.63-.06l.07.06L8 7.29l4.65-4.64a.5.5 0 01.7.7L8.71 8l4.64 4.65c.18.17.2.44.06.63l-.06.07a.5.5 0 01-.63.06l-.07-.06L8 8.71l-4.65 4.64a.5.5 0 01-.7-.7L7.29 8 2.65 3.35a.5.5 0 01-.06-.63l.06-.07-.06.07z"></path></svg></button>
+            </div>
+            <div class="modal-body">
+                <!-- 内容由 showWordDetail 渲染，结构与查单词页结果一致 -->
+                <div id="wdDetailContent"></div>
             </div>
         </div>
     </div>
@@ -134,17 +161,20 @@
         </div>
     </div>
 
-    <script src="data/preset_zk.js"></script>
-    <script src="data/preset_gk.js"></script>
-    <script src="data/preset_cet4.js"></script>
-    <script src="data/preset_cet6.js"></script>
-    <script src="data/preset_ky.js"></script>
-    <script src="data/preset_ielts.js"></script>
-    <script src="data/preset_toefl.js"></script>
-    <script src="data/preset_gre.js"></script>
-    <script src="data/preset_data.js"></script>
-    <script src="js/common.js?v=22"></script>
-    <script src="js/mylists.js?v=20"></script>
+    <div id="appToast"></div>
+
+    <script src="data/preset_zk.js?v=2"></script>
+    <script src="data/preset_gk.js?v=2"></script>
+    <script src="data/preset_cet4.js?v=2"></script>
+    <script src="data/preset_cet6.js?v=2"></script>
+    <script src="data/preset_ky.js?v=2"></script>
+    <script src="data/preset_ielts.js?v=2"></script>
+    <script src="data/preset_toefl.js?v=2"></script>
+    <script src="data/preset_gre.js?v=2"></script>
+    <script src="data/preset_data.js?v=2"></script>
+    <script src="js/lib/xlsx.core.min.js"></script>
+    <script src="js/common.js?v=25"></script>
+    <script src="js/mylists.js?v=23"></script>
 </body>
 
 </html>
