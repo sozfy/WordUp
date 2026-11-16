@@ -289,6 +289,51 @@ button, a, .onoff, input, textarea, select {
     margin: 0;
 }
 
+/* 侧边栏筛选栏：只显示今日任务 */
+.sidebar-filter {
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.sidebar-filter-btn {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.sidebar-filter-btn:hover {
+    color: var(--highlight);
+    border-color: var(--highlight);
+}
+
+.sidebar-filter-btn.active {
+    color: var(--highlight);
+    border-color: var(--highlight);
+    background: var(--accent-20);
+}
+
+/* 未排期词表在「只显示今日任务」下变暗，仍然可点 */
+.sidebar-list-item.dim {
+    opacity: 0.45;
+}
+
+.sidebar-list-item.dim:hover {
+    opacity: 0.75;
+}
+
+.sidebar-empty-tip {
+    padding: 14px 20px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
 /* 侧边栏头部图标按钮 */
 .icon-btn {
     width: 32px;
@@ -851,6 +896,7 @@ button, a, .onoff, input, textarea, select {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    cursor: pointer;
 }
 
 .word {
@@ -860,12 +906,7 @@ button, a, .onoff, input, textarea, select {
     margin-bottom: 0.5rem;
     margin-top: 10px;
     word-break: break-word;
-    cursor: pointer;
     border-radius: 6px;
-    transition: background-color .15s;
-}
-.word:hover {
-    background-color: var(--bg-main);
 }
 
 .meaning {
@@ -873,12 +914,7 @@ button, a, .onoff, input, textarea, select {
     color: var(--success);
     margin-top: 0.5rem;
     white-space: normal;
-    cursor: pointer;
     border-radius: 6px;
-    transition: background-color .15s;
-}
-.meaning:hover {
-    background-color: var(--bg-main);
 }
 
 .phonetic {
@@ -887,6 +923,11 @@ button, a, .onoff, input, textarea, select {
     margin-top: 0.25rem;
     min-height: 1.2em;
     word-break: break-word;
+}
+
+/* 词意互换：音标已移到单词（currentMeaning）下方，收紧与单词的间距 */
+#currentMeaning.swap-mode + .phonetic {
+    margin-top: 0.15rem;
 }
 
 /* 词意互换：意思用小字号（绿）、单词用大字号（白），位置不变 */
@@ -1007,6 +1048,11 @@ button.options {
 
 button.options:hover:not(:disabled) {
     background-color: var(--text-faint);
+}
+
+/* 等待期锁定：只挡点击，不套用禁用配色，正确/错误的绿红块保持可见 */
+#optionDiv.locked {
+    pointer-events: none;
 }
 
 /* 详细释义：选项长释义不省略、全部换行展示 */
@@ -2680,32 +2726,173 @@ input.spell-input {
     color: var(--danger);
 }
 
-/* 窄屏：表单与任务卡纵向排列 */
+/* 窄屏（手机）：压缩留白、行高与字号，让一屏显示更多 */
 @media (max-width: 560px) {
     .dt-form {
         flex-direction: column;
         align-items: stretch;
+        gap: 8px;
+        margin: 2px 0 8px;
+    }
+
+    /* 纵向排列下不要保留桌面端的 190px 主轴基准，否则字段之间会出现大片空白 */
+    .dt-field {
+        flex: 0 0 auto;
     }
 
     .dt-form-btns {
         width: 100%;
+        gap: 8px;
     }
 
     .dt-form-btns > button {
         flex: 1 1 0;
+        min-height: 34px;
     }
 
     .dt-add-btn {
         width: 100%;
+        padding: 6px 12px;
     }
 
-    .dt-card,
+    .dt-check,
+    .dt-edit,
+    .dt-del,
+    .dt-ghost,
+    .dt-primary {
+        min-height: 34px;
+        padding: 6px 10px;
+    }
+
+    .dt-form select,
+    .dt-form input[type="date"] {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    /* 移动端紧凑字号 */
+    .dt-field-label,
+    .dt-card-meta,
+    .dt-task-meta,
+    .dt-empty,
+    .dt-future-row,
+    .dt-interval-label,
+    .dt-interval-unit,
+    .dt-preview-title {
+        font-size: 0.78rem;
+    }
+
+    /* 今日任务：名称与完成按钮同排，压缩内边距 */
+    .dt-card {
+        flex-wrap: nowrap;
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .dt-card-name {
+        font-size: 0.9rem;
+    }
+
+    /* 已建任务：一条一行（名称+首次学习在左，修改/删除在右） */
     .dt-task-row {
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+    }
+
+    .dt-task-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
+    }
+
+    .dt-task-name {
+        font-size: 0.9rem;
+    }
+
+    .dt-edit {
+        grid-column: 2;
+    }
+
+    .dt-del {
+        grid-column: 3;
+    }
+
+    /* 未来安排：仍一行一天，行内更紧 */
+    .dt-future-row {
+        padding: 6px 10px;
     }
 
     .dt-future-date {
-        min-width: 96px;
-        font-size: 0.76rem;
+        min-width: 0;
+        font-size: 0.75rem;
+    }
+
+    .dt-future-list,
+    .dt-task-list {
+        max-height: 200px;
+    }
+
+    .dt-list {
+        gap: 6px;
+    }
+
+    /* 本页窄屏：页面与区块留白、弹窗内边距（.dt-page 限定，不影响其他页） */
+    .dt-page .container {
+        padding: 10px 8px 20px;
+        padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    }
+
+    .dt-page .section {
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    .dt-page .section + .section {
+        margin-top: 10px;
+    }
+
+    .dt-page .section h3 {
+        font-size: 1rem;
+        margin-bottom: 6px;
+    }
+
+    .dt-page .tip {
+        font-size: 0.8rem;
+    }
+
+    .dt-page .modal-header {
+        padding: 12px 14px;
+    }
+
+    .dt-page .modal-body {
+        padding: 14px;
+    }
+
+    .dt-page .modal-close {
+        width: 34px;
+        height: 34px;
+    }
+
+    .dt-page .dt-interval-item {
+        padding: 4px 8px;
+        gap: 4px;
+    }
+
+    .dt-page .dt-interval-item input[type="number"] {
+        width: 52px;
+        padding: 4px 6px;
+        font-size: 12px;
+    }
+
+    .dt-page .dt-interval-hint {
+        margin-top: 0.4rem;
+        font-size: 0.75rem;
+    }
+
+    .dt-page .dt-interval-actions {
+        gap: 8px;
     }
 }
