@@ -369,16 +369,90 @@ function batchDeleteSelected() {
     });
 }
 
+// ---------- 只显示今日任务：按「每日任务」的排期过滤侧边栏词表 ----------
+let _onlyTodayTasks = false;       // 开关状态：true = 只看今日任务
+let _onlyTodayFilterBusy = false;  // 读取排期数据期间的防抖
+let _scheduledListIds = null;      // 已建任务的词表 id
+let _todayListIds = null;          // 今天有复习节点的词表 id
+
+// 本地日期字符串 YYYY-MM-DD，避免时区偏移
+function wmDateStr(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function wmTodayStr() {
+    return wmDateStr(new Date());
+}
+
+function wmAddDaysStr(str, n) {
+    const p = String(str).split('-');
+    if (p.length !== 3) return '';
+    return wmDateStr(new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + Number(n)));
+}
+
+// 读取每日任务数据，算出「已排期」与「今天要复习」两份词表 id
+async function refreshTodayTaskSets() {
+    const daily = await loadDailyTasks();
+    const today = wmTodayStr();
+    const gaps = (daily && Array.isArray(daily.intervals)) ? daily.intervals : [];
+    const scheduled = new Set();
+    const due = new Set();
+    ((daily && daily.tasks) || []).forEach(t => {
+        if (!t || !t.startDate) return;
+        scheduled.add(String(t.listId));
+        // 第 n 次复习日 = 首次学习日期 + 第 n 次间隔，命中今天即为今日任务
+        if (gaps.some(g => wmAddDaysStr(t.startDate, g) === today)) due.add(String(t.listId));
+    });
+    _scheduledListIds = scheduled;
+    _todayListIds = due;
+}
+
+async function toggleOnlyTodayTasks() {
+    if (_onlyTodayFilterBusy) return;
+    const btn = document.getElementById('onlyTodayTasksBtn');
+    _onlyTodayTasks = !_onlyTodayTasks;
+    if (btn) {
+        btn.classList.toggle('active', _onlyTodayTasks);
+        btn.setAttribute('aria-pressed', _onlyTodayTasks ? 'true' : 'false');
+    }
+    if (!_onlyTodayTasks) {
+        renderSidebarLists();   // 关闭后按 data.lists 原顺序重绘，顺序自然复原
+        return;
+    }
+    _onlyTodayFilterBusy = true;
+    try {
+        await refreshTodayTaskSets();
+        renderSidebarLists();
+        if (_todayListIds.size === 0) {
+            showToast('今天没有需要复习的词表，未排期的词表已变暗', 'warning');
+        } else {
+            const hidden = _scheduledListIds.size - _todayListIds.size;
+            showToast('已只看今日任务：' + _todayListIds.size + ' 个词表今天要复习' + (hidden > 0 ? '，隐藏 ' + hidden + ' 个非今日任务' : ''));
+        }
+    } finally {
+        _onlyTodayFilterBusy = false;
+    }
+}
+
 function renderSidebarLists() {
     const data = getWordData();
     const container = document.getElementById('sidebarLists');
     if (!data || !container) return;
+    const onlyToday = _onlyTodayTasks === true;
+    const scheduled = onlyToday ? (_scheduledListIds || new Set()) : null;
+    const due = onlyToday ? (_todayListIds || new Set()) : null;
     let html = '';
+    let shown = 0;
     data.lists.forEach((list, index) => {
         const isActive = list.id === data.activeListId;
+        const listId = String(list.id);
+        // 有任务但今天没有复习节点 → 隐藏；没排期的词表 → 变暗但保留
+        if (onlyToday && scheduled.has(listId) && !due.has(listId)) return;
+        const dim = (onlyToday && !scheduled.has(listId)) ? ' dim' : '';
+        shown++;
         if (_batchDeleteMode) {
             const checked = _batchSelected.has(list.id) ? ' checked' : '';
-            html += '<div class="sidebar-list-item batch-mode' + (isActive ? ' active' : '') + '" onclick="toggleBatchSelect(\'' + list.id + '\')">';
+            html += '<div class="sidebar-list-item batch-mode' + (isActive ? ' active' : '') + dim + '" onclick="toggleBatchSelect(\'' + list.id + '\')">';
             html += '  <input type="checkbox" class="batch-check"' + checked + '>';
             html += '  <div class="list-item-info">';
             html += '    <span class="list-item-name">' + escapeHtml(list.name) + '</span>';
@@ -386,9 +460,10 @@ function renderSidebarLists() {
             html += '  </div>';
             html += '</div>';
         } else {
-            html += '<div class="sidebar-list-item' + (isActive ? ' active' : '') + '" draggable="true" data-index="' + index + '" ' +
-                'ondragstart="listDragStart(event)" ondragover="listDragOver(event)" ' +
-                'ondrop="listDrop(event)" ondragend="listDragEnd(event)">';
+            const dragAttrs = onlyToday
+                ? 'draggable="false"'
+                : 'draggable="true" ondragstart="listDragStart(event)" ondragover="listDragOver(event)" ondrop="listDrop(event)" ondragend="listDragEnd(event)"';
+            html += '<div class="sidebar-list-item' + (isActive ? ' active' : '') + dim + '" ' + dragAttrs + ' data-index="' + index + '">';
             html += '  <div class="list-item-info" onclick="switchList(\'' + list.id + '\')">';
             html += '    <span class="list-item-name">' + escapeHtml(list.name) + '</span>';
             html += '    <span class="list-item-count">' + list.words.length + ' 词</span>';
@@ -407,6 +482,7 @@ function renderSidebarLists() {
             html += '</div>';
         }
     });
+    if (onlyToday && shown === 0) html = '<div class="sidebar-empty-tip">今天没有需要复习的词表</div>';
     container.innerHTML = html;
 }
 
@@ -509,6 +585,7 @@ function renderCurrentWord() {
     wordEl.textContent = swap ? meaningText : list.selectedWord.word;
     meaningEl.textContent = swap ? list.selectedWord.word : meaningText;
     meaningEl.classList.add('hidden');
+    syncPhoneticPlacement();
     updatePhoneticDisplay();
     return true;
 }
@@ -744,9 +821,11 @@ function refreshCurrentList(force) {
 
 // ---------- 选项相关逻辑 ----------
 let optionsText = [];
+let _optionsLocked = false; // 「关闭手动确认」等待期内锁定选项；不用 disabled，避免丢失对错配色
 
 // 重置全部选项按钮：文案恢复占位、清空内联样式、按选项个数显隐、可选禁用
 function resetOptionButtons(disabled) {
+    setOptionButtonsClickable(true); // 重建选项即解锁，避免上一轮等待期的锁定残留到下一词
     const count = getOptionCount();
     for (let i = 1; i <= 6; i++) {
         const btn = document.getElementById('optionButton' + i);
@@ -762,10 +841,14 @@ function resetOptionButtons(disabled) {
 }
 
 // 临时锁定/解锁全部选项按钮（关闭手动确认作答后，1 秒等待期内禁止重复点击改写判定）
+// 这里不设置 disabled：全局 button:disabled 的 !important 背景会盖掉正确/错误的绿红色块
 function setOptionButtonsClickable(clickable) {
+    _optionsLocked = !clickable;
+    const optionDiv = document.getElementById('optionDiv');
+    if (optionDiv) optionDiv.classList.toggle('locked', !clickable);
     for (let i = 1; i <= 6; i++) {
         const btn = document.getElementById('optionButton' + i);
-        if (btn) btn.disabled = !clickable;
+        if (btn) btn.setAttribute('aria-disabled', clickable ? 'false' : 'true');
     }
 }
 
@@ -830,6 +913,7 @@ function createOptions() {
 }
 
 function isOptionCorrect(num) {
+    if (_optionsLocked) return; // 等待期内禁止重复作答，避免覆盖已判定的对错
     const list = getActiveList();
     const selectedOption = optionsText[num - 1];
     if (!list || !list.selectedWord || !selectedOption) return;
@@ -1271,9 +1355,21 @@ function isWordRevealed() {
     const meaningEl = document.getElementById('currentMeaning');
     return !!(meaningEl && !meaningEl.classList.contains('hidden'));
 }
+// 音标跟随单词：词意互换时单词在 currentMeaning（大白字），音标要落在它下面；未互换时回到单词与释义之间
+function syncPhoneticPlacement() {
+    const el = document.getElementById('currentPhonetic');
+    const meaningEl = document.getElementById('currentMeaning');
+    if (!el || !meaningEl || !meaningEl.parentNode) return;
+    if (isSwapOn()) {
+        if (meaningEl.nextSibling !== el) meaningEl.parentNode.insertBefore(el, meaningEl.nextSibling);
+    } else if (el.nextSibling !== meaningEl) {
+        meaningEl.parentNode.insertBefore(el, meaningEl);
+    }
+}
 function updatePhoneticDisplay() {
     const el = document.getElementById('currentPhonetic');
     if (!el) return;
+    syncPhoneticPlacement(); // 先按词意互换状态摆好位置，再决定是否显示
     const list = getActiveList();
     const w = list && list.selectedWord;
     if (!isPhoneticOn() || !w) {
@@ -1546,17 +1642,10 @@ function clearAllWords() {
             if (w) showWordDetail(w);
         });
     }
+    // 只有「上一个单词」可点开详细；显示区的单词与释义不响应点击
     bindWordDetailClick(document.getElementById('lastWord'), () => {
         const list = getActiveList();
         return list && (list.lastJudgedWord || (list.lastJudged ? list.lastJudged.split(' — ')[0] : ''));
-    });
-    bindWordDetailClick(document.getElementById('currentWord'), () => {
-        const list = getActiveList();
-        return list && list.selectedWord ? list.selectedWord.word : '';
-    });
-    bindWordDetailClick(document.getElementById('currentMeaning'), () => {
-        const list = getActiveList();
-        return list && list.selectedWord ? list.selectedWord.word : '';
     });
 
     // 绑定底部按钮事件
