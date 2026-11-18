@@ -296,7 +296,9 @@ button, a, .onoff, input, textarea, select {
 }
 
 .sidebar-filter-btn {
+    display: block;
     width: 100%;
+    margin: 0;
     padding: 6px 10px;
     font-size: 0.78rem;
     font-family: inherit;
@@ -940,6 +942,22 @@ button, a, .onoff, input, textarea, select {
     font-size: 2rem;
     font-weight: bold;
     color: var(--white);
+}
+
+/* 显示区单词可点朗读：只在“当前显示的是单词”的元素上给手型 */
+#currentWord:not(.swap-mode),
+#currentMeaning.swap-mode {
+    cursor: pointer;
+}
+
+/* 点击单词的小缩放动画（无背景色，视觉上只是文字微缩一下） */
+@keyframes wordTap {
+    0% { transform: scale(1); }
+    45% { transform: scale(0.94); }
+    100% { transform: scale(1); }
+}
+.word-tap {
+    animation: wordTap 0.18s ease-out;
 }
 
 /* ---------- 开关 ---------- */
