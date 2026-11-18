@@ -1415,6 +1415,7 @@ async function ensurePhoneticAsync(w) {
 // ---------- 点击显示区的单词：朗读一次（Web Speech API，语言由设置决定） ----------
 // 语音语言白名单，与设置弹窗 #speakLangSelect 的选项一一对应
 const SPEAK_LANGS = ['en-US', 'en-GB', 'zh-CN', 'fr-FR', 'ru-RU', 'es-ES', 'ar-SA', 'ja-JP', 'ko-KR'];
+const SPEAK_LANG_NAMES = { 'en-US': '英语（美）', 'en-GB': '英语（英）', 'zh-CN': '汉语', 'fr-FR': '法语', 'ru-RU': '俄语', 'es-ES': '西班牙语', 'ar-SA': '阿拉伯语', 'ja-JP': '日语', 'ko-KR': '韩语' };
 let _voiceCache = {}; // { 语言: 语音对象 }，语音列表可能异步加载，取不到时下次再试
 function getSpeakLang() {
     try {
@@ -1428,6 +1429,50 @@ function applySpeakLang() {
     if (!sel || SPEAK_LANGS.indexOf(sel.value) < 0) return;
     setStored('speakLang', sel.value);
     _voiceCache = {}; // 语言换了，重新挑语音
+    if (!hasVoiceForLang(sel.value)) {
+        showToast('当前设备没有「' + (SPEAK_LANG_NAMES[sel.value] || sel.value) + '」语音，只能用系统默认语音朗读', 'warning');
+    }
+}
+// 系统是否装了该语言的语音；语音列表还没加载时返回 true，避免误报
+function hasVoiceForLang(lang) {
+    const synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== 'function') return false;
+    const voices = synth.getVoices() || [];
+    if (!voices.length) return true;
+    const base = String(lang || '').replace('_', '-').toLowerCase().split('-')[0];
+    return voices.some(function (v) {
+        return String(v.lang || '').replace('_', '-').toLowerCase().split('-')[0] === base;
+    });
+}
+// 手动检测：当前语言是否装了对应语音包（语音列表异步加载，最多等 2 秒）
+function checkVoicePack() {
+    const lang = getSpeakLang();
+    const name = SPEAK_LANG_NAMES[lang] || lang;
+    const synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== 'function' || typeof window.SpeechSynthesisUtterance !== 'function') {
+        showToast('当前浏览器不支持语音朗读，无法检测语音包', 'error');
+        return;
+    }
+    const base = String(lang).toLowerCase().split('-')[0];
+    const deadline = Date.now() + 2000;
+    const report = function (voices) {
+        const hits = voices.filter(function (v) {
+            return String(v.lang || '').replace('_', '-').toLowerCase().split('-')[0] === base;
+        });
+        if (hits.length) {
+            showToast('已检测到「' + name + '」语音：' + hits[0].name + '（' + hits[0].lang + '），系统共 ' + voices.length + ' 个语音', 'success');
+        } else if (!voices.length) {
+            showToast('系统没有返回任何语音数据。安卓：设置 → 文字转语音 → 安装语音数据；iPhone：设置 → 辅助功能 → 朗读内容 → 声音', 'warning');
+        } else {
+            showToast('未检测到「' + name + '」语音（系统共 ' + voices.length + ' 个语音）。安卓：设置 → 文字转语音 → 安装语音数据；iPhone：设置 → 辅助功能 → 朗读内容 → 声音', 'warning');
+        }
+    };
+    const tick = function () {
+        const voices = synth.getVoices() || [];
+        if (voices.length || Date.now() >= deadline) { report(voices); return; }
+        setTimeout(tick, 200);
+    };
+    tick();
 }
 function pickVoiceFor(lang) {
     const synth = window.speechSynthesis;
@@ -1457,7 +1502,11 @@ function speakWord() {
     u.pitch = 1;
     if (!_voiceCache[lang]) _voiceCache[lang] = pickVoiceFor(lang);
     if (_voiceCache[lang]) u.voice = _voiceCache[lang];
-    synth.speak(u);
+    // 安卓上 cancel 后立刻 speak 常常静默失败；iOS 被中断后需要先 resume
+    setTimeout(function () {
+        try { if (synth.paused) synth.resume(); } catch (e) { /* 忽略 */ }
+        try { synth.speak(u); } catch (e) { /* 忽略 */ }
+    }, 60);
 }
 
 function applyPhonetic() {
@@ -1723,6 +1772,10 @@ function clearAllWords() {
     }
     bindSpeakOnDisplay(document.getElementById('currentWord'));
     bindSpeakOnDisplay(document.getElementById('currentMeaning'));
+    // 语音列表异步加载（手机首次常返回空），加载完成后清缓存，下次点击重新挑语音
+    if (window.speechSynthesis && typeof window.speechSynthesis.addEventListener === 'function') {
+        window.speechSynthesis.addEventListener('voiceschanged', function () { _voiceCache = {}; });
+    }
 
     // 绑定底部按钮事件
     const footerBtns = document.querySelectorAll('.footer-icon-btn');
