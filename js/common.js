@@ -744,6 +744,11 @@ async function autoImportDictFromCSV(id) {
         let text;
         if (resp.body && resp.body.getReader) {
             const contentLength = parseInt(resp.headers.get('content-length'), 10) || 0;
+            // 头部 content-length 在压缩传输（content-encoding: gzip 等）下是“压缩后”长度，
+            // 而 reader 返回的是浏览器自动解压后的字节：一旦解压字节超过头部长度，就判定该长度不可信，
+            // 改用“已接收 x MB”推进进度，避免原文只下到几分之一就显示 100% 却还在传
+            let lengthTrusted = contentLength > 0;
+            let revealFrom = 0; // 切换到“按已接收量推进”时的起始字节
             const reader = resp.body.getReader();
             const chunks = [];
             let received = 0;
@@ -777,11 +782,20 @@ async function autoImportDictFromCSV(id) {
                     const winBytes = speedWindow.reduce((s, w) => s + w.bytes, 0);
                     const winMs = Math.max(1, now - speedWindow[0].t);
                     const speed = winBytes / winMs * 1000;
-                    if (contentLength > 0) {
-                        const pct = Math.max(0, Math.min(100, received / contentLength * 100));
+                    // 下载阶段占进度条 0~92%，解析 92~96%，存储 96~100%，全程一条进度条不回退
+                    if (lengthTrusted && received > contentLength) {
+                        lengthTrusted = false;
+                        revealFrom = received;
+                    }
+                    if (lengthTrusted && contentLength > 0) {
+                        const pct = Math.min(91, received / contentLength * 91);
                         showImportHint('正在下载词典 ' + Math.round(pct) + '%（' + fmtSpeed(speed) + '）...', pct);
                     } else {
-                        showImportHint('正在下载词典 ' + (received / 1048576).toFixed(1) + 'MB（' + fmtSpeed(speed) + '）...');
+                        // 总量未知：按已接收量渐近推进（91 → 92），文字给出真实已接收量
+                        const extra = Math.max(0, received - revealFrom);
+                        const pct = Math.min(92, 91 + (1 - Math.exp(-extra / (40 * 1048576))));
+                        const amount = received >= 1048576 ? (received / 1048576).toFixed(1) + 'MB' : Math.round(received / 1024) + 'KB';
+                        showImportHint('正在下载词典 已接收 ' + amount + '（' + fmtSpeed(speed) + '）...', pct);
                     }
                 }
             } finally {
@@ -796,9 +810,9 @@ async function autoImportDictFromCSV(id) {
             text = await resp.text();
         }
 
-        showImportHint('正在解析词典数据 0% ...', 0);
+        showImportHint('正在解析词典数据 0% ...', 92);
         const rows = parseCSV(text, (ratio) => {
-            showImportHint('正在解析词典数据 ' + Math.round(ratio * 100) + '% ...', ratio * 100);
+            showImportHint('正在解析词典数据 ' + Math.round(ratio * 100) + '% ...', 92 + ratio * 4);
         });
         if (rows.length < 2) {
             hideImportHint();
@@ -851,12 +865,12 @@ async function autoImportDictFromCSV(id) {
             }
             done += end - i;
             const pct = Math.round((done / total) * 100);
-            showImportHint('正在存储词典 ' + pct + '% ...', pct);
+            showImportHint('正在存储词典 ' + pct + '% ...', 96 + (done / total) * 4);
             // 让出主线程，避免页面卡死
             await new Promise(r => setTimeout(r, 0));
         }
 
-        showImportHint('词典导入完成');
+        showImportHint('词典导入完成', 100);
         window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: done } }));
         setTimeout(hideImportHint, 600);
         console.log('词典导入完成，共写入 ' + done + ' 行');

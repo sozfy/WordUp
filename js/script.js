@@ -1412,10 +1412,57 @@ async function ensurePhoneticAsync(w) {
         _phoneticLoading.delete(key);
     }
 }
+// ---------- 点击显示区的单词：朗读一次（Web Speech API，语言由设置决定） ----------
+// 语音语言白名单，与设置弹窗 #speakLangSelect 的选项一一对应
+const SPEAK_LANGS = ['en-US', 'en-GB', 'zh-CN', 'fr-FR', 'ru-RU', 'es-ES', 'ar-SA', 'ja-JP', 'ko-KR'];
+let _voiceCache = {}; // { 语言: 语音对象 }，语音列表可能异步加载，取不到时下次再试
+function getSpeakLang() {
+    try {
+        const v = localStorage.getItem('speakLang');
+        if (v && SPEAK_LANGS.indexOf(v) >= 0) return v;
+    } catch (e) { /* 隐私模式等场景忽略 */ }
+    return 'en-US';
+}
+function applySpeakLang() {
+    const sel = document.getElementById('speakLangSelect');
+    if (!sel || SPEAK_LANGS.indexOf(sel.value) < 0) return;
+    setStored('speakLang', sel.value);
+    _voiceCache = {}; // 语言换了，重新挑语音
+}
+function pickVoiceFor(lang) {
+    const synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== 'function') return null;
+    const voices = synth.getVoices() || [];
+    const key = String(lang || '').replace('_', '-').toLowerCase();
+    const base = key.split('-')[0];
+    let sameBase = null;
+    for (const v of voices) {
+        const vl = String(v.lang || '').replace('_', '-').toLowerCase();
+        if (vl === key) return v; // 精确匹配优先（en-US / zh-CN …）
+        if (!sameBase && vl.split('-')[0] === base) sameBase = v; // 同语种兜底（en-GB / en-AU …）
+    }
+    return sameBase;
+}
+function speakWord() {
+    const synth = window.speechSynthesis;
+    if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    const list = getActiveList();
+    const w = list && list.selectedWord ? String(list.selectedWord.word || '').trim() : '';
+    if (!w) return;
+    const lang = getSpeakLang();
+    synth.cancel(); // 每次点击只播一次，避免排队叠加
+    const u = new SpeechSynthesisUtterance(w);
+    u.lang = lang;
+    u.rate = 1;
+    u.pitch = 1;
+    if (!_voiceCache[lang]) _voiceCache[lang] = pickVoiceFor(lang);
+    if (_voiceCache[lang]) u.voice = _voiceCache[lang];
+    synth.speak(u);
+}
+
 function applyPhonetic() {
     const b = document.getElementById('phoneticBtn');
-    if (!b) return;
-    setStoredFlag('phoneticMode', b.checked);
+    if (!b) return;    setStoredFlag('phoneticMode', b.checked);
     updatePhoneticDisplay();
 }
 
@@ -1599,6 +1646,8 @@ function clearAllWords() {
     if (queueSizeSel) queueSizeSel.value = String(getStoredInt('queueSize', 3, 10, QUEUE_SIZE_DEFAULT));
     const optionCountSelect = document.getElementById('optionCountSelect');
     if (optionCountSelect) optionCountSelect.value = String(getStoredInt('optionCount', 3, 6, 4));
+    const speakLangSel = document.getElementById('speakLangSelect');
+    if (speakLangSel) speakLangSel.value = getSpeakLang();
 
     // 互斥兜底：记忆队列与单轮循环、拼写与选项不同时开启
     if (queueBtn && queueBtn.checked && roundBtn && roundBtn.checked) {
@@ -1642,11 +1691,38 @@ function clearAllWords() {
             if (w) showWordDetail(w);
         });
     }
-    // 只有「上一个单词」可点开详细；显示区的单词与释义不响应点击
+    // 只有「上一个单词」可点开详细；显示区的单词与释义不弹详细
     bindWordDetailClick(document.getElementById('lastWord'), () => {
         const list = getActiveList();
         return list && (list.lastJudgedWord || (list.lastJudged ? list.lastJudged.split(' — ')[0] : ''));
     });
+
+    // 点击显示区的“单词”朗读一次（美式发音）：词意互换时单词在 currentMeaning，未互换时在 currentWord
+    function bindSpeakOnDisplay(el) {
+        if (!el) return;
+        let lastPointerUp = 0;
+        const fire = () => {
+            const showingWordId = isSwapOn() ? 'currentMeaning' : 'currentWord';
+            if (el.id !== showingWordId) return;
+            // 点击缩放动画：先移除再重排，保证连续点击也能重播
+            el.classList.remove('word-tap');
+            void el.offsetWidth;
+            el.classList.add('word-tap');
+            speakWord();
+        };
+        el.addEventListener('pointerup', () => {
+            lastPointerUp = Date.now();
+            fire();
+        });
+        el.addEventListener('click', () => {
+            if (Date.now() - lastPointerUp < 400) return; // 同一次触摸的 click 不重复朗读
+            fire();
+        });
+        // 动画结束后清掉类名，避免残留（下次点击会重新移除并触发）
+        el.addEventListener('animationend', () => el.classList.remove('word-tap'));
+    }
+    bindSpeakOnDisplay(document.getElementById('currentWord'));
+    bindSpeakOnDisplay(document.getElementById('currentMeaning'));
 
     // 绑定底部按钮事件
     const footerBtns = document.querySelectorAll('.footer-icon-btn');
