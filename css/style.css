@@ -693,6 +693,26 @@ button, a, .onoff, input, textarea, select {
     margin-left: 8px;
 }
 
+/* 语音语言行的「检测」小按钮：与问号图标同等分量 */
+.voice-check-btn {
+    padding: 0;
+    margin: 0 0 0 6px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-family: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.2s;
+}
+
+.voice-check-btn:hover {
+    color: var(--highlight);
+}
+
 /* ---------- 主内容区 ---------- */
 .main-content {
     color: inherit;
