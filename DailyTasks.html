@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#3a3c44">
+    <script>try{if(localStorage.getItem('theme')==='light'){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name="theme-color"]');if(m)m.content='#edf1f6'}}catch(e){}</script>
     <title>每日任务</title>
-    <link rel="stylesheet" href="css/style.css?v=135">
+    <link rel="stylesheet" href="css/style.css?v=157">
 </head>
 <body class="dt-page">
 <!-- 页面加载遮罩：加载完成前显示 -->
@@ -25,12 +26,23 @@
             <a href="./WordMemorizer.html" class="nav-link">背单词</a>
             <a href="./DictLookup.html" class="nav-link">查单词</a>
         </div>
-        <a href="./User.html" class="nav-user-btn" title="用户" aria-label="用户">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="7.8" r="3.6"></circle>
-                <path d="M4.8 20c0-3.55 3.22-5.6 7.2-5.6s7.2 2.05 7.2 5.6"></path>
-            </svg>
-        </a>
+        <div class="bannerRightBox">
+            <button type="button" class="nav-theme-btn" id="themeToggleBtn" title="切换到浅色模式" aria-label="切换到浅色模式" aria-pressed="false" onclick="toggleTheme()">
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20.9 12.9A8.9 8.9 0 1 1 11.1 3.1a7 7 0 0 0 9.8 9.8z"></path>
+                </svg>
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5 5l1.6 1.6M17.4 17.4l1.6 1.6M19 5l-1.6 1.6M6.6 17.4L5 19"></path>
+                </svg>
+            </button>
+            <a href="./User.html" class="nav-user-btn" title="用户" aria-label="用户">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="7.8" r="3.6"></circle>
+                    <path d="M4.8 20c0-3.55 3.22-5.6 7.2-5.6s7.2 2.05 7.2 5.6"></path>
+                </svg>
+            </a>
+        </div>
     </header>
 
     <!--中心-->
@@ -137,7 +149,7 @@
 
     <div id="appToast"></div>
 
-    <script src="js/common.js?v=26"></script>
+    <script src="js/common.js?v=32"></script>
     <script src="js/daily.js?v=4"></script>
 </body>
 
