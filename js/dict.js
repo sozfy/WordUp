@@ -187,6 +187,8 @@ function renderListWordResult(hit) {
 function renderResult(entry) {
     const resultEl = document.getElementById('dictResult');
     if (!resultEl) return;
+    // 日语词条按 JMdict 自身结构渲染（写法 / 读音 / 义项 / 例句），不套英汉词典版式
+    if (entry && entry.lang === 'ja') { renderJaResult(entry); return; }
 
     let tagsHtml = '';
     const tags = formatTags(entry.tag);
@@ -226,6 +228,76 @@ function renderResult(entry) {
         html += '</div>';
     }
     html += tagsHtml;
+    resultEl.innerHTML = html;
+}
+
+// ---------- 日语词条（JMdict 结构） ----------
+// 版式：主表记 → 读音（多个用「、」连接）→ 其他写法 → 等级/词性 → 逐条义项（中译 + 英文原义 + 语境）→ 例句
+function renderJaResult(entry) {
+    const resultEl = document.getElementById('dictResult');
+    if (!resultEl) return;
+
+    const forms = entry.forms || { kanji: [], kana: [] };
+    const kanjiAll = (forms.kanji || []).map(k => k.text).filter(Boolean);
+    const kanaAll = (forms.kana || []).map(k => k.text).filter(Boolean);
+    const senses = entry.senses || [];
+    const examples = entry.examples || [];
+
+    let html = '';
+    html += '<div class="dict-word">' + escapeHtml(entry.word) + '</div>';
+    // 读音行：有汉字表记时显示假名；纯假名词条把其余变体标为「其他读音」
+    const hasKanji = kanjiAll.length > 0;
+    const kanaShow = kanaAll.filter(k => k !== entry.word);
+    if (kanaShow.length > 0) {
+        html += hasKanji
+            ? '<div class="dict-phonetic ja-kana">' + escapeHtml(kanaAll.join('、')) + '</div>'
+            : '<div class="ja-forms">其他读音　' + escapeHtml(kanaShow.join('、')) + '</div>';
+    }
+    // 其他汉字写法（主表记之外的）
+    const otherKanji = kanjiAll.filter(k => k !== entry.word);
+    if (otherKanji.length > 0) {
+        html += '<div class="ja-forms">其他写法　' + escapeHtml(otherKanji.join('、')) + '</div>';
+    }
+
+    // 等级行（JMdict 词条级字段只有 jlpt；词性属于单条义项，放在义项行内）
+    if (entry.jlpt) html += '<div class="ja-meta">' + escapeHtml(entry.jlpt) + '</div>';
+
+    // 义项
+    if (senses.length > 0) {
+        html += '<div class="dict-section-title">释义</div><div class="ja-senses">';
+        senses.forEach((s, i) => {
+            const zh = (s.zh || []).join('；');
+            const en = (s.en || []).join('; ');
+            const pos = (s.pos || []).join(', ');
+            html += '<div class="ja-sense">';
+            html += '<div class="ja-sense-zh">' + (i + 1) + '. ';
+            if (pos) html += '<span class="ja-pos">' + escapeHtml(pos) + '</span> ';
+            html += escapeHtml(zh || '—');
+            if (s.context) html += '<span class="ja-context">（' + escapeHtml(s.context) + '）</span>';
+            html += '</div>';
+            if (en) html += '<div class="ja-sense-en">' + escapeHtml(en) + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    // 例句
+    if (examples.length > 0) {
+        html += '<div class="dict-section-title">例句</div><div class="ja-examples">';
+        examples.forEach((x, i) => {
+            html += '<div class="ja-example">';
+            html += '<div class="ja-example-jp">' + (i + 1) + '. ' + escapeHtml(x.jp);
+            if (x.level) html += '<span class="ja-example-lv">' + escapeHtml(x.level) + '</span>';
+            html += '</div>';
+            if (x.zh) html += '<div class="ja-example-zh">' + escapeHtml(x.zh) + '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    if (entry.entryId) {
+        html += '<div class="ja-entry-id">JMdict ' + escapeHtml(entry.entryId) + ' · jmdict-cn · CC BY-SA 4.0</div>';
+    }
     resultEl.innerHTML = html;
 }
 
@@ -277,14 +349,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderDictSelect();
     setupSuggestions();
 
-    // 支持 ?word=xxx：从背单词弹窗「查看详细」跳转而来，自动填入输入框并查询
+    // 支持 ?word=xxx：从背单词弹窗「查看详细」跳转而来，只填入输入框，不自动查询
     const params = new URLSearchParams(location.search);
     const urlWord = params.get('word');
     if (urlWord) {
         const input = document.getElementById('searchInput');
         if (input) {
             input.value = urlWord;
-            searchWord();
         }
     }
 

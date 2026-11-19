@@ -9,22 +9,13 @@ let _mylistsBusy = false;
 // 重新下载图标（刷新）
 const REFRESH_ICON = '<svg width="1em" height="1em" viewBox="0 0 20 20" fill="currentColor"><path d="M6.2 4.1a.5.5 0 01-.1.7 6.5 6.5 0 003.66 11.7h.38l-1.55-1.55a.5.5 0 11.7-.7l2.12 2.11c.2.2.2.52 0 .71L9.3 19.2a.5.5 0 11-.7-.7l1-1A7.5 7.5 0 015.5 3.99a.5.5 0 01.7.1zM11.42.8c.2.2.2.52 0 .71l-1 1a7.5 7.5 0 014.07 13.5.5.5 0 11-.59-.8 6.5 6.5 0 00-3.66-11.7l-.3-.01a.5.5 0 01-.07 0l1.55 1.55a.5.5 0 11-.7.7L8.59 3.65a.5.5 0 010-.71L10.7.8c.2-.2.5-.2.7 0z"></path></svg>';
 
-// 预设词表展开箭头（向下）
-const PRESET_ARROW_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-
 // 渲染词典列表：先渲染全部词典行（状态"检测中"、按钮全部禁用），再并行查询下载状态逐本更新
 async function renderDictList() {
     const container = document.getElementById('dictList');
     if (!container) return;
 
     container.innerHTML = DICT_CATALOG.map(dict => {
-        // 该词典对应的预设词表
-        const presets = (dict.presets || []).map(tag => getPresetListByTag(tag)).filter(Boolean);
-        const presetChips = presets.map(p =>
-            '<button type="button" class="preset-chip" onclick="createFromPresetTag(\'' + p.tag + '\')">' +
-            escapeHtml(p.name) + '<span class="cnt">' + p.count + '词</span></button>'
-        ).join('');
-        return '<div class="dict-row" data-dict="' + dict.id + '" onclick="onDictRowClick(\'' + dict.id + '\', event)">' +
+        return '<div class="dict-row" data-dict="' + dict.id + '">' +
         '  <div class="dict-info">' +
         '    <span class="dict-name">' + escapeHtml(dict.name) + '</span>' +
         '    <span class="dict-desc">' + escapeHtml(dict.desc) + '</span>' +
@@ -40,13 +31,6 @@ async function renderDictList() {
         '      <button class="danger" disabled onclick="deleteDict(\'' + dict.id + '\')">删除</button>' +
         '    </div>' +
         '  </div>' +
-        // 箭头：垂直居中的视觉指示（点击整行任意处触发）
-        '  <button type="button" class="dict-preset-btn" title="预设词表">' + PRESET_ARROW_ICON + '</button>' +
-        '</div>' +
-        // 行下方深色展开区（文档流内，展开时把下方内容往下推）
-        '<div class="dict-preset-expand" id="presetExpand_' + dict.id + '" style="display:none;">' +
-        '  <div class="preset-tip">点击预设词表创建词表（预设只存单词，创建时自动查词典补全释义与音标），可在背单词页查看</div>' +
-        '  <div class="preset-chips">' + presetChips + '</div>' +
         '</div>';
     }).join('');
 
@@ -147,56 +131,39 @@ function deleteDict(id) {
     });
 }
 
-// 点击词典行任意处展开/收起预设词表（操作按钮区域除外）
-function onDictRowClick(id, event) {
-    if (event.target.closest('.dict-actions')) return;
-    togglePresetPanel(id);
+// ---------- 预设词表（独立区块，不隶属任何一本词典） ----------
+// 下拉框决定导入时用哪本词典补全释义与音标；预设数据只存单词
+function renderPresetSection() {
+    const sel = document.getElementById('presetDictSelect');
+    const chips = document.getElementById('presetChips');
+    if (!sel || !chips) return;
+
+    const current = getPresetDictId();
+    sel.innerHTML = DICT_CATALOG.map(d =>
+        '<option value="' + d.id + '">' + escapeHtml(d.name) + '</option>'
+    ).join('');
+    sel.value = current;
+
+    const lists = (window.PRESET_LISTS || []);
+    chips.innerHTML = lists.map(p =>
+        '<button type="button" class="preset-chip" onclick="createFromPresetTag(\'' + p.tag + '\')">' +
+        escapeHtml(p.name) + '<span class="cnt">' + p.count + '词</span></button>'
+    ).join('');
+
+    // 未下载的词典在下拉框里标注（不影响选择，导入时会提示）
+    Promise.all(DICT_CATALOG.map(async (d) => {
+        const count = await countDictEntries(d.id);
+        const opt = sel.querySelector('option[value="' + d.id + '"]');
+        if (opt) opt.textContent = d.name + (count > 0 ? '' : '（未下载）');
+    })).catch(() => { /* 状态标注失败不影响导入 */ });
 }
 
-// 收起单个展开区（带动画，动画结束后隐藏）
-function closeOnePresetPanel(panel) {
-    if (panel.classList.contains('open')) {
-        panel.classList.remove('open');
-        setTimeout(() => { if (!panel.classList.contains('open')) panel.style.display = 'none'; }, 250);
-    } else {
-        panel.style.display = 'none';
-    }
+function onPresetDictChange() {
+    const sel = document.getElementById('presetDictSelect');
+    if (sel) setPresetDictId(sel.value);
 }
 
-// 展开/收起预设词表展开区（同一时间只展开一个）
-function togglePresetPanel(id) {
-    document.querySelectorAll('.dict-preset-expand').forEach(el => {
-        if (el.id !== 'presetExpand_' + id) closeOnePresetPanel(el);
-    });
-    document.querySelectorAll('.dict-preset-btn.open').forEach(b => b.classList.remove('open'));
-    const panel = document.getElementById('presetExpand_' + id);
-    if (panel) {
-        const open = panel.classList.contains('open') || panel.style.display === 'block';
-        if (open) {
-            closeOnePresetPanel(panel);
-        } else {
-            panel.style.display = 'block';
-            setTimeout(() => panel.classList.add('open'), 20); // 下一帧加展开类，触发过渡动画
-            const btn = document.querySelector('.dict-row[data-dict="' + id + '"] .dict-preset-btn');
-            if (btn) btn.classList.add('open');
-        }
-    }
-}
-
-// 收起全部展开区
-function closeAllPresetPanels() {
-    document.querySelectorAll('.dict-preset-expand').forEach(el => closeOnePresetPanel(el));
-    document.querySelectorAll('.dict-preset-btn.open').forEach(b => b.classList.remove('open'));
-}
-
-// 点击词典行或展开区以外区域时收起
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.dict-row') && !e.target.closest('.dict-preset-expand')) {
-        closeAllPresetPanels();
-    }
-});
-
-// 点击预设词表项：预设文件只存单词，创建词表时查词典补全释义与音标
+// 点击预设词表项：预设文件只存单词，导入时用所选词典补全释义与音标
 let _presetCreating = false;
 async function createFromPresetTag(tag) {
     if (!tag) return;
@@ -215,10 +182,11 @@ async function createFromPresetTag(tag) {
         return;
     }
 
-    // 预设只存单词，没有词典就没有释义 → 未下载时先引导下载
-    const dictId = 'ecdict';
+    // 预设只存单词，没有词典就没有释义 → 用下拉框选定的词典；未下载时引导切换或下载
+    const dictId = getPresetDictId();
+    const dict = getDictById(dictId);
     if (!(await isDictLoaded(dictId))) {
-        showToast('预设词表只存单词，需先在上方「已下载的词典」中下载 ECDICT 词典，导入时才能补全释义', 'warning');
+        showToast('预设词表只存单词，需先用「' + dict.name + '」补全释义；请先下载该词典，或在「补全用词典」里换一本已下载的', 'warning');
         return;
     }
 
@@ -261,7 +229,6 @@ async function createFromPresetTag(tag) {
         data.lists.push(newList);
         data.activeListId = newList.id;
         saveWordData(data);
-        closeAllPresetPanels();
 
         const missing = words.filter(w => w.meaning === '(无释义)').length;
         showToast('已创建词表「' + newList.name + '」，共 ' + words.length + ' 个单词' +
@@ -590,10 +557,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initWordDataCache(); // 加载共享词表数据（无则创建默认词表）
     await initSavedListsCache(); // 加载「我的词典」词表数据（独立 key）
     await renderDictList();
+    renderPresetSection();
     renderSavedLists();
     hideLoading(); // 初始化完成，隐藏加载遮罩
     window.addEventListener('dictReady', async () => {
         await renderDictList();
+        renderPresetSection();
         renderSavedLists();
     });
 });

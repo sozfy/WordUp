@@ -942,6 +942,8 @@ function isOptionCorrect(num) {
     const meaningEl = document.getElementById('currentMeaning');
     if (meaningEl) meaningEl.classList.remove('hidden');
     updatePhoneticDisplay(); // 词意互换时单词随选项结果揭示，音标同步出现
+    // 自动播放（词意互换 + 关闭手动确认）：点选项后朗读
+    if (isAutoSpeakOn() && isSwapOn() && isCloseManualConfirmOn()) speakWord();
     if (isCloseManualConfirmOn()) {
         // 关闭手动确认：以选项对错作为认识/不认识判定，1 秒后自动跳到下一个
         setOptionButtonsClickable(false); // 等待期内锁定选项，防止连点覆盖对错判定
@@ -1063,6 +1065,8 @@ function drawWord(num) {
     createOptions();
     refreshCurrentList();
     updateRemainCount();
+    // 自动播放（未开词意互换）：新词一出现就朗读
+    if (isAutoSpeakOn() && !isSwapOn()) speakWord();
 }
 
 function startDraw() {
@@ -1087,6 +1091,8 @@ function toggleMeaning() {
             const target = String(list.selectedWord.word || '').toLowerCase();
             spellInputEl.style.color = (typed === target) ? '#67c23a' : '#f56c6c';
         }
+        // 自动播放（词意互换）：点「显示单词」揭示后朗读
+        if (isAutoSpeakOn() && isSwapOn()) speakWord();
     } else {
         meaningEl.classList.add('hidden');
     }
@@ -1413,6 +1419,35 @@ async function ensurePhoneticAsync(w) {
     }
 }
 // ---------- 点击显示区的单词：朗读一次（Web Speech API，语言由设置决定） ----------
+// 语音总开关：关闭后点击单词与自动播放都不发声
+function isSpeakEnabled() {
+    const btn = document.getElementById('speakEnabledBtn');
+    if (btn) return !!btn.checked;
+    return getStoredFlag('speakEnabled', true);
+}
+function applySpeakEnabled() {
+    const btn = document.getElementById('speakEnabledBtn');
+    if (!btn) return;
+    setStoredFlag('speakEnabled', btn.checked);
+    const row = document.getElementById('autoSpeakRow');
+    const auto = document.getElementById('autoSpeakBtn');
+    if (row) row.classList.toggle('disabled', !btn.checked);
+    if (auto) auto.disabled = !btn.checked;
+    if (!btn.checked && window.speechSynthesis) {
+        try { window.speechSynthesis.cancel(); } catch (e) { /* 忽略 */ }
+    }
+}
+// 自动播放：未开词意互换时换词即读；开词意互换时揭示后读
+function isAutoSpeakOn() {
+    const btn = document.getElementById('autoSpeakBtn');
+    if (btn) return !!btn.checked;
+    return getStoredFlag('autoSpeak', false);
+}
+function applyAutoSpeak() {
+    const btn = document.getElementById('autoSpeakBtn');
+    if (!btn) return;
+    setStoredFlag('autoSpeak', btn.checked);
+}
 // 语音语言白名单，与设置弹窗 #speakLangSelect 的选项一一对应
 const SPEAK_LANGS = ['en-US', 'en-GB', 'zh-CN', 'fr-FR', 'ru-RU', 'es-ES', 'ar-SA', 'ja-JP', 'ko-KR'];
 const SPEAK_LANG_NAMES = { 'en-US': '英语（美）', 'en-GB': '英语（英）', 'zh-CN': '汉语', 'fr-FR': '法语', 'ru-RU': '俄语', 'es-ES': '西班牙语', 'ar-SA': '阿拉伯语', 'ja-JP': '日语', 'ko-KR': '韩语' };
@@ -1432,6 +1467,7 @@ function applySpeakLang() {
     if (!hasVoiceForLang(sel.value)) {
         showToast('当前设备没有「' + (SPEAK_LANG_NAMES[sel.value] || sel.value) + '」语音，只能用系统默认语音朗读', 'warning');
     }
+    renderVoiceList();
 }
 // 系统是否装了该语言的语音；语音列表还没加载时返回 true，避免误报
 function hasVoiceForLang(lang) {
@@ -1443,6 +1479,67 @@ function hasVoiceForLang(lang) {
     return voices.some(function (v) {
         return String(v.lang || '').replace('_', '-').toLowerCase().split('-')[0] === base;
     });
+}
+// 设置弹窗分页切换（单词设置 / 语音设置）
+function switchSettingsTab(name) {
+    const tabs = document.querySelectorAll('.settings-tab');
+    for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === name);
+    }
+    const word = document.getElementById('settingsPaneWord');
+    const voice = document.getElementById('settingsPaneVoice');
+    if (word) word.classList.toggle('hidden', name !== 'word');
+    if (voice) voice.classList.toggle('hidden', name !== 'voice');
+    if (name === 'voice') renderVoiceList();
+}
+// 语音设置：列出当前语言可用的系统音色（只读展示）
+function renderVoiceList() {
+    const listEl = document.getElementById('voiceList');
+    if (!listEl) return;
+    const countEl = document.getElementById('voiceCount');
+    const synth = window.speechSynthesis;
+    if (!synth || typeof synth.getVoices !== 'function') {
+        if (countEl) countEl.textContent = '不支持';
+        listEl.innerHTML = '<span class="voice-empty">当前浏览器不支持语音朗读</span>';
+        return;
+    }
+    const lang = getSpeakLang();
+    const key = String(lang).replace('_', '-').toLowerCase();
+    const base = key.split('-')[0];
+    const all = synth.getVoices() || [];
+    const exact = [];
+    const same = [];
+    for (let i = 0; i < all.length; i++) {
+        const vl = String(all[i].lang || '').replace('_', '-').toLowerCase();
+        if (vl === key) exact.push(all[i]);
+        else if (vl.split('-')[0] === base) same.push(all[i]);
+    }
+    const hits = exact.length ? exact : same; // 有同地区音色就用它们，否则退回同语种
+    if (countEl) {
+        let txt;
+        if (exact.length) {
+            txt = exact.length + ' 个（' + lang + '）';
+            if (same.length) txt += '，另有 ' + same.length + ' 个其他变体';
+        } else if (same.length) {
+            txt = '无 ' + lang + ' 专用音色，退回 ' + same.length + ' 个同语种音色';
+        } else {
+            txt = '0 个（' + lang + '）';
+        }
+        countEl.textContent = txt;
+    }
+    if (!hits.length) {
+        listEl.innerHTML = '<span class="voice-empty">' + (all.length
+            ? '当前语言没有可用音色，可点「检测」查看安装方法'
+            : '未检测到语音，点上面「检测」唤醒后会自动刷新') + '</span>';
+        return;
+    }
+    listEl.innerHTML = hits.map(function (v, i) {
+        const name = escapeHtml(String(v.name || '未命名'));
+        const lg = escapeHtml(String(v.lang || ''));
+        return '<span class="voice-item"><span class="voice-name">' + (i + 1) + '. ' + name + '</span>' +
+            '<span class="voice-meta">' + lg + (v.localService ? '' : ' · 在线') +
+            (i === 0 ? ' · <span class="voice-cur">当前使用</span>' : '') + '</span></span>';
+    }).join('');
 }
 // 手动检测：当前语言是否装了对应语音包（语音列表异步加载，最多等 2 秒）
 function checkVoicePack() {
@@ -1489,6 +1586,7 @@ function pickVoiceFor(lang) {
     return sameBase;
 }
 function speakWord() {
+    if (!isSpeakEnabled()) return; // 语音总开关关闭时一律不发声
     const synth = window.speechSynthesis;
     if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
     const list = getActiveList();
@@ -1690,6 +1788,8 @@ function clearAllWords() {
     const spellBtn = setChecked('spellBtn', getStoredFlag('spellMode', false));
     setChecked('detailMeaningBtn', getStoredFlag('detailMeaningMode', false));
     setChecked('closeManualConfirmBtn', getStoredFlag('autoConfirmMode', false));
+    setChecked('speakEnabledBtn', getStoredFlag('speakEnabled', true));
+    setChecked('autoSpeakBtn', getStoredFlag('autoSpeak', false));
 
     const queueSizeSel = document.getElementById('queueSizeSelect');
     if (queueSizeSel) queueSizeSel.value = String(getStoredInt('queueSize', 3, 10, QUEUE_SIZE_DEFAULT));
@@ -1713,6 +1813,7 @@ function clearAllWords() {
 
     // 应用设置：词意互换（含字体/按钮文案/选项）、拼写框、音标、选项区
     applySwap();
+    applySpeakEnabled(); // 同步「自动播放」行的可用状态
     updateSpellInput();
     updatePhoneticDisplay();
     createOptions();
@@ -1774,7 +1875,10 @@ function clearAllWords() {
     bindSpeakOnDisplay(document.getElementById('currentMeaning'));
     // 语音列表异步加载（手机首次常返回空），加载完成后清缓存，下次点击重新挑语音
     if (window.speechSynthesis && typeof window.speechSynthesis.addEventListener === 'function') {
-        window.speechSynthesis.addEventListener('voiceschanged', function () { _voiceCache = {}; });
+        window.speechSynthesis.addEventListener('voiceschanged', function () {
+            _voiceCache = {};
+            renderVoiceList();
+        });
     }
 
     // 绑定底部按钮事件
@@ -1783,6 +1887,8 @@ function clearAllWords() {
         footerBtns[0].addEventListener('click', function(e) {
             e.stopPropagation();
             openModal('settingsModal');
+            renderVoiceList(); // 打开设置时刷新音色数量
+            setTimeout(renderVoiceList, 600); // 语音列表异步加载，稍后再补一次
         });
     }
     if (footerBtns[1]) {

@@ -186,11 +186,18 @@ async function buildWordObjects(parsed, dictId) {
     const needLookup = parsed.filter(p => !p.custom);
     let entries = new Map();
     if (needLookup.length > 0) {
-        const loaded = await isDictLoaded(dictId);
+        // 未指定词典时用「补全用词典」；它未下载则退到第一本已下载的词典（多词典场景）
+        let id = dictId || getPresetDictId();
+        if (!(await isDictLoaded(id))) {
+            for (const d of DICT_CATALOG) {
+                if (d.id !== id && await isDictLoaded(d.id)) { id = d.id; break; }
+            }
+        }
+        const loaded = await isDictLoaded(id);
         if (!loaded) {
             return { words: [], failed: needLookup.map(p => p.word), dictMissing: true };
         }
-        entries = await lookupWords(needLookup.map(p => p.word), dictId);
+        entries = await lookupWords(needLookup.map(p => p.word), id);
     }
     const words = [];
     const failed = [];
@@ -216,8 +223,15 @@ async function buildWordObjects(parsed, dictId) {
 async function fillMissingMeanings(items, dictId) {
     const missing = (items || []).filter(item => item && !item.meaning && !item.customMeaning);
     if (missing.length === 0) return items;
+    // 与 buildWordObjects 同样的词典回退规则：未指定 → 补全用词典 → 第一本已下载的词典
+    let id = dictId || getPresetDictId();
+    if (!(await isDictLoaded(id))) {
+        for (const d of DICT_CATALOG) {
+            if (d.id !== id && await isDictLoaded(d.id)) { id = d.id; break; }
+        }
+    }
     let entries = new Map();
-    try { entries = await lookupWords(missing.map(item => item.word), dictId); } catch (e) { /* 查不到按无释义处理 */ }
+    try { entries = await lookupWords(missing.map(item => item.word), id); } catch (e) { /* 查不到按无释义处理 */ }
     missing.forEach(item => {
         const e = entries.get(String(item.word).toLowerCase());
         item.meaning = e ? normalizeNewlines(e.translation || e.definition || '(无释义)') : '(无释义)';
@@ -256,18 +270,32 @@ const DICT_DB_VERSION = 1;
 
 // 词典目录：在此扩展多本词典（id 唯一；urls 为下载源，按顺序尝试；expectedCount 用于状态显示）
 // 每本词典独立数据库：WordMemorizerDict_<id>
+// 预设词表已与词典解绑（见 data/preset_*.js），导入时用「预设词表」区所选词典补全释义
 const DICT_CATALOG = [
     {
         id: 'ecdict',
         name: 'ECDICT 英汉词典',
         desc: 'ECDICT 开源英汉词典：音标 / 释义 / 词性 / 词频 / 同根词等',
         expectedCount: '770,611',
-        // 该词典可用的预设词表 tag（见 data/preset_*.js）
-        presets: ['zk', 'gk', 'cet4', 'cet6', 'ky', 'ielts', 'toefl', 'gre'],
         urls: [
             'data/ecdict.csv',
             'https://ghproxy.net/https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv',
             'https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv'
+        ]
+    },
+    {
+        id: 'jmdict-cn',
+        name: 'JMdict 日中词典（N5–N1）',
+        desc: 'JMdict 中文化：汉字表记 / 假名读音 / 中文释义 / 英文义项 / 例句 · CC BY-SA 4.0',
+        expectedCount: '12,758',
+        // format: jmdict 表示按 files 逐个下载 JSON 合并导入（文件顺序即级别序：N5=1 … N1=5）
+        format: 'jmdict',
+        files: [
+            'jmdict-cn-N5.json',
+            'jmdict-cn-N4.json',
+            'jmdict-cn-N3.json',
+            'jmdict-cn-N2.json',
+            'jmdict-cn-N1.json'
         ]
     }
 ];
@@ -277,6 +305,17 @@ function getDictById(id) {
 }
 function dictDBName(id) {
     return DICT_DB_PREFIX + id;
+}
+
+// 预设词表导入时用于补全释义的词典（独立于任何一本词典，存 localStorage）
+const PRESET_DICT_KEY = 'presetDictId';
+function getPresetDictId() {
+    let id = '';
+    try { id = localStorage.getItem(PRESET_DICT_KEY) || ''; } catch (e) { /* 忽略 */ }
+    return DICT_CATALOG.some(d => d.id === id) ? id : DICT_CATALOG[0].id;
+}
+function setPresetDictId(id) {
+    try { localStorage.setItem(PRESET_DICT_KEY, id); } catch (e) { /* 忽略 */ }
 }
 
 // 已打开的数据库连接缓存：key = name@version
@@ -713,6 +752,8 @@ function hideImportHint() {
 async function autoImportDictFromCSV(id) {
     if (window.dictAutoImporting) return;
     const dict = getDictById(id || 'ecdict');
+    // JSON 型词典（format: jmdict）走多文件合并导入
+    if (dict.format === 'jmdict') return autoImportJmdict(dict.id);
     if (await isDictLoaded(dict.id)) return;
 
     window.dictAutoImporting = true;
@@ -882,6 +923,205 @@ async function autoImportDictFromCSV(id) {
         const abortMsg = (e && e.name === 'AbortError')
             ? '词典下载中断（网络停滞或超时），请检查网络后重试'
             : '词典下载失败：' + (e && e.message ? e.message : e);
+        showToast(abortMsg, 'error');
+    } finally {
+        window.dictAutoImporting = false;
+    }
+}
+
+// ---------- JMdict 中文化词典（JSON 多文件导入） ----------
+// 数据源：github.com/zzhuxiaojun-glitch/jmdict-cn（JSON 逐级拆分，许可 CC BY-SA 4.0）
+// 单文件候选源顺序：本地 data/jmdict-cn/ → ghproxy 加速 → GitHub 直连
+function jmdictFileUrls(name) {
+    const raw = 'https://raw.githubusercontent.com/zzhuxiaojun-glitch/jmdict-cn/main/data/' + name;
+    return ['data/jmdict-cn/' + name, 'https://ghproxy.net/' + raw, raw];
+}
+
+// jmdict 条目 → 词典库记录：保留 JMdict 自身结构（写法 / 读音 / 义项 / 例句 / 等级）
+// word 仍为主表记（IndexedDB 主键，检索用），phonetic/translation 供词表与背单词取用
+// level: 1=N5 … 5=N1，用于前缀联想的排序权重（越基础越靠前）
+function mapJmdictEntry(e, level) {
+    if (!e) return null;
+    const kanji = (e.kanji || []).filter(Boolean)
+        .map(k => ({ text: k.text || '', common: !!k.common })).filter(k => k.text);
+    const kana = (e.kana || []).filter(Boolean)
+        .map(k => ({ text: k.text || '', common: !!k.common })).filter(k => k.text);
+    const head = (kanji[0] && kanji[0].text) || (kana[0] && kana[0].text);
+    if (!head) return null;
+
+    // 义项：英文原义（senses_en）与中译（senses_zh）按顺序合成同一条
+    const enSenses = (e.senses_en || []).filter(Boolean);
+    const zhSenses = (e.senses_zh || []).filter(Boolean);
+    const senses = [];
+    const count = Math.max(enSenses.length, zhSenses.length);
+    for (let i = 0; i < count; i++) {
+        const en = enSenses[i] || {};
+        const zh = zhSenses[i] || {};
+        senses.push({
+            pos: en.pos || [],
+            en: en.glosses || [],
+            zh: zh.glosses || [],
+            context: zh.context || ''
+        });
+    }
+
+    // 词表用的一行式释义（背单词与词表只读这段文本）
+    const translation = senses.map(s => {
+        const g = (s.zh || []).join('；');
+        if (!g) return '';
+        return s.context ? g + '（' + s.context + '）' : g;
+    }).filter(Boolean).join('\n');
+
+    const examples = (e.examples || []).filter(Boolean)
+        .map(x => ({ jp: x.jp || '', zh: x.zh || '', level: x.level || '', source: x.source || '' }))
+        .filter(x => x.jp);
+
+    return {
+        word: head,
+        phonetic: (kana[0] && kana[0].text) || '',
+        translation: translation,
+        lang: 'ja',
+        jlpt: e.jlpt || '',
+        tag: e.jlpt ? 'jlpt-' + e.jlpt : '',
+        frq: String(level),
+        entryId: e.id || '',
+        forms: { kanji: kanji, kana: kana },
+        senses: senses,
+        examples: examples,
+        source: 'jmdict-cn'
+    };
+}
+
+// 批量写入词典库（一批一个事务，避免逐条开事务）
+async function putDictEntries(db, entries) {
+    await new Promise((resolve, reject) => {
+        const tx = db.transaction(DICT_STORE_WORDS, 'readwrite');
+        const store = tx.objectStore(DICT_STORE_WORDS);
+        entries.forEach(e => store.put(e));
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+// 流式下载文本：60 秒内必须拿到响应头，30 秒无新数据视为断流
+// onProgress(已接收字节, 总字节；总字节未知时为 0)
+async function fetchTextStream(url, onProgress) {
+    const ctrl = new AbortController();
+    const headTimer = setTimeout(() => ctrl.abort(), 60000);
+    let resp;
+    try {
+        resp = await fetch(url, { signal: ctrl.signal });
+    } finally {
+        clearTimeout(headTimer);
+    }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    if (!resp.body || !resp.body.getReader) return await resp.text();
+    const total = parseInt(resp.headers.get('content-length'), 10) || 0;
+    const reader = resp.body.getReader();
+    const chunks = [];
+    let received = 0;
+    let idleTimer = null;
+    const armIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => { try { ctrl.abort(); } catch (e) { /* 忽略 */ } }, 30000);
+    };
+    armIdle();
+    try {
+        while (true) {
+            const r = await reader.read();
+            armIdle();
+            if (r.done) break;
+            if (!r.value) continue;
+            chunks.push(r.value);
+            received += r.value.length;
+            if (onProgress) onProgress(received, total);
+        }
+    } finally {
+        clearTimeout(idleTimer);
+    }
+    const bytes = new Uint8Array(received);
+    let off = 0;
+    for (const c of chunks) { bytes.set(c, off); off += c.length; }
+    return new TextDecoder().decode(bytes);
+}
+
+// 下载并导入 JMdict 中文化词典：逐文件下载 → 解析 → 写库
+// 进度条：0–55% 下载（按文件均分），55–100% 存储（按文件 + 条目比例）
+async function autoImportJmdict(id) {
+    if (window.dictAutoImporting) return;
+    const dict = getDictById(id || 'jmdict-cn');
+    if (await isDictLoaded(dict.id)) return;
+    const files = dict.files || [];
+    if (files.length === 0) {
+        showToast('词典配置缺少数据文件，导入失败', 'error');
+        return;
+    }
+
+    window.dictAutoImporting = true;
+    try {
+        const db = await openDictDB(dict.id);
+        let written = 0;
+        for (let fi = 0; fi < files.length; fi++) {
+            const name = files[fi];
+            const basePct = 55 * fi / files.length;   // 本文件下载区间起点
+            const spanPct = 55 / files.length;        // 本文件下载区间长度
+
+            let text = null;
+            const urls = jmdictFileUrls(name);
+            for (const url of urls) {
+                try {
+                    text = await fetchTextStream(url, (got, total) => {
+                        // 总长度已知按比例推进；未知时按已接收量渐近推进（每文件按 8MB 估）
+                        const r = total > 0 ? Math.min(1, got / total) : Math.min(0.98, got / (8 * 1048576));
+                        showImportHint('正在下载日语词典 ' + (fi + 1) + '/' + files.length + ' ...', basePct + spanPct * r);
+                    });
+                    if (text) break;
+                } catch (err) {
+                    console.warn('日语词典源不可用：' + url, err);
+                }
+            }
+            if (!text) throw new Error('无法获取 ' + name + '（本地与 GitHub 均不可用）');
+
+            let arr;
+            try { arr = JSON.parse(text); } catch (e) { throw new Error(name + ' 不是合法 JSON'); }
+            if (!Array.isArray(arr) || arr.length === 0) throw new Error(name + ' 词条为空');
+
+            const level = fi + 1;   // 文件顺序即级别序：N5=1 … N1=5
+            const total = arr.length;
+            const batch = 400;
+            for (let i = 0; i < total; i += batch) {
+                const rows = [];
+                const end = Math.min(i + batch, total);
+                for (let j = i; j < end; j++) {
+                    const main = mapJmdictEntry(arr[j], level);
+                    if (!main) continue;
+                    rows.push(main);
+                    // 假名别名：有汉字表记时额外写一条假名记录，输入假名也能查到
+                    if (main.phonetic && main.phonetic !== main.word) {
+                        rows.push(Object.assign({}, main, { word: main.phonetic, alias: true }));
+                    }
+                }
+                if (rows.length > 0) await putDictEntries(db, rows);
+                written += rows.length;
+                const pct = 55 + 45 * ((fi + end / total) / files.length);
+                showImportHint('正在存储日语词典 ' + Math.round(pct) + '% ...', pct);
+                // 让出主线程，避免页面卡死
+                await new Promise(r => setTimeout(r, 0));
+            }
+        }
+
+        showImportHint('日语词典导入完成', 100);
+        window.dispatchEvent(new CustomEvent('dictReady', { detail: { count: written } }));
+        setTimeout(hideImportHint, 600);
+        console.log('日语词典导入完成，共写入 ' + written + ' 条');
+    } catch (e) {
+        console.warn('日语词典导入失败', e);
+        hideImportHint();
+        // 中途失败清空半成品，避免“已下载但词条不全”的假成功
+        try { await clearDictStore(dict.id); } catch (err) { /* 忽略 */ }
+        const abortMsg = (e && e.name === 'AbortError')
+            ? '日语词典下载中断（网络停滞或超时），请检查网络后重试'
+            : '日语词典导入失败：' + (e && e.message ? e.message : e);
         showToast(abortMsg, 'error');
     } finally {
         window.dictAutoImporting = false;
@@ -1246,3 +1486,53 @@ function clearAllCache() {
         })();
     });
 }
+
+/* ---------- 主题：暗色 / 浅色（六页共用，localStorage 键 theme） ---------- */
+const THEME_KEY = 'theme';
+
+function getTheme() {
+    try {
+        return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark';
+    } catch (e) {
+        return 'dark';
+    }
+}
+
+function syncThemeButton() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    const light = getTheme() === 'light';
+    const tip = light ? '切换到暗色模式' : '切换到浅色模式';
+    btn.title = tip;
+    btn.setAttribute('aria-label', tip);
+    btn.setAttribute('aria-pressed', light ? 'true' : 'false');
+}
+
+function applyTheme(theme) {
+    const value = theme === 'light' ? 'light' : 'dark';
+    const el = document.documentElement;
+    // 先关掉过渡，避免变量变了但颜色停在旧值
+    el.classList.add('theme-switching');
+    if (value === 'light') {
+        el.setAttribute('data-theme', 'light');
+    } else {
+        el.removeAttribute('data-theme');
+    }
+    try { localStorage.setItem(THEME_KEY, value); } catch (e) { /* 隐私模式下忽略 */ }
+    // 同步移动端状态栏配色
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', value === 'light' ? '#edf1f6' : '#3a3c44');
+    syncThemeButton();
+    void el.offsetWidth; // 强制重排，让新颜色先落地
+    requestAnimationFrame(function () {
+        el.classList.remove('theme-switching');
+    });
+}
+
+function toggleTheme() {
+    applyTheme(getTheme() === 'light' ? 'dark' : 'light');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    applyTheme(getTheme());
+});
