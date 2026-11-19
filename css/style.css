@@ -58,6 +58,115 @@
     --overlay-50: rgba(0, 0, 0, 0.5);
     --overlay-55: rgba(0, 0, 0, 0.55);
     --overlay-60: rgba(0, 0, 0, 0.6);
+
+    /* 交互底色（悬停 / 卡片底色 / 浅色提示），深浅主题各一套 */
+    --tint-1: rgba(255, 255, 255, 0.10);
+    --tint-2: rgba(255, 255, 255, 0.14);
+    --tint-hover: rgba(186, 236, 255, 0.12);
+    --tint-card: rgba(255, 255, 255, 0.05);
+    --tint-danger: rgba(245, 108, 108, 0.12);
+
+    /* 禁用按钮 / 选项按钮底色（不随文字变量变化，深浅各一套） */
+    --disabled-bg: #cccccc;
+    --disabled-fg: #666666;
+    --option-bg: #f0f0f0;
+    --option-bg-hover: #dddddd;
+    /* 开关关闭态轨道（与文字色解耦） */
+    --toggle-off-bg: #b3b0b0;
+    --toggle-off-border: #9c9b9b;
+}
+
+/* 切换主题时短暂关闭过渡，避免自定义属性变更把颜色停在旧值 */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+    transition: none !important;
+}
+
+/* ---------- 浅色主题：仅覆盖变量，结构与暗色完全一致 ---------- */
+html[data-theme="light"] {
+    /* 背景：纯白页面 + 中性浅灰区块，不带蓝调 */
+    --bg-main: #f2f3f4;
+    --bg-panel: #ffffff;
+    --bg-deep: #ffffff;
+    --bg-sub-box: #f7f7f8;
+    --bg-overlay: rgba(18, 18, 20, 0.14);
+    --bg-overlay-weak: rgba(18, 18, 20, 0.06);
+
+    /* 边框 */
+    --border: #c9cace;
+
+    /* 文字：--white 兼作正文色，浅色下转为中性深色 */
+    --white: #1c1c1e;
+    --black: #000;
+    --text-main: #1c1c1e;
+    --text-secondary: #6b6b70;
+    --text-tertiary: #45464a;
+    --text-light: #35363a;
+    --text-light-2: #35363a;
+    --text-dim: #8e8e93;
+    --text-muted: #7a7b80;
+    --text-soft: #5c5d62;
+    --text-soft-2: #6a6b70;
+    --text-faint: #303236;
+    --text-faint-2: #303236;
+    --text-faint-3: #ececed;
+    --text-faint-4: #6a6b70;
+
+    /* 主色 / 强调：按钮与链接保留蓝色，只用于小面积 */
+    --accent: #2b7fd6;
+    --accent-dark: #1966b3;
+    --accent-soft: #2f86d8;
+    --accent-deep: #1c72c2;
+    --accent-20: rgba(43, 127, 214, 0.10);
+    --highlight: #1677c8;
+
+    /* 状态色（浅底上略加深，保证文字对比度） */
+    --success: #4e9c2c;
+    --success-dark: #3f8422;
+    --success-soft: #d8f2df;
+    --warning: #c8811f;
+    --warning-soft: #fdeccd;
+    --danger: #d95656;
+    --danger-2: #c94444;
+    --danger-dark: #cf3b2c;
+    --danger-deep: #ab2c20;
+    --danger-soft: #ffdede;
+    --danger-20: rgba(217, 86, 86, 0.16);
+
+    /* 交互底色：中性黑半透明，不再发蓝 */
+    --tint-1: rgba(0, 0, 0, 0.03);
+    --tint-2: rgba(0, 0, 0, 0.06);
+    --tint-hover: rgba(0, 0, 0, 0.05);
+    --tint-card: rgba(0, 0, 0, 0.02);
+    --tint-danger: rgba(217, 86, 86, 0.10);
+
+    /* 禁用按钮 / 选项按钮底色 */
+    --disabled-bg: #ececee;
+    --disabled-fg: #9a9aa0;
+    --option-bg: #e8e9eb;
+    --option-bg-hover: #dcdee1;
+
+    /* 开关关闭态轨道：浅底上改用中性浅灰 */
+    --toggle-off-bg: #d7d7da;
+    --toggle-off-border: #c4c4c8;
+}
+
+/* 浅色：主内容区块（.section）同样用纯白，与页面底色一致，靠边框与阴影分层 */
+html[data-theme="light"] .section {
+    background-color: #ffffff;
+    box-shadow: 0 0 6px rgba(18, 18, 20, 0.10), 0 0 20px -4px rgba(18, 18, 20, 0.12);
+}
+
+/* 浅色：单词显示区用浅灰，与纯白区块拉开层次 */
+html[data-theme="light"] .word-display {
+    background-color: #f7f7f8;
+}
+
+/* 浅色：「上一个单词」条再深一档，明确是可点击块 */
+html[data-theme="light"] .word-last {
+    background-color: #e8e9eb;
 }
 
 * {
@@ -162,6 +271,52 @@ h1 {
     color: var(--white) !important;
 }
 
+/* 导航栏右侧容器：主题切换按钮 + 用户页入口 */
+.bannerRightBox {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 主题切换按钮：暗色显示月亮，浅色显示太阳 */
+.bannerRightBox .nav-theme-btn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--highlight);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.bannerRightBox .nav-theme-btn:hover {
+    background: var(--tint-1);
+    color: var(--white);
+}
+
+.bannerRightBox .nav-theme-btn:active {
+    background: var(--tint-2);
+}
+
+.bannerRightBox .nav-theme-btn svg {
+    display: none;
+    width: 20px;
+    height: 20px;
+}
+
+html:not([data-theme="light"]) .bannerRightBox .nav-theme-btn .icon-moon,
+html[data-theme="light"] .bannerRightBox .nav-theme-btn .icon-sun {
+    display: block;
+}
+
 /* 导航栏右侧：用户页入口（人形图标） */
 .nav-user-btn {
     flex: 0 0 auto;
@@ -177,13 +332,13 @@ h1 {
 }
 
 .nav-user-btn:hover {
-    background: rgba(255, 255, 255, 0.10);
+    background: var(--tint-1);
     color: var(--white);
 }
 
 /* 当前就在用户页时高亮 */
 .nav-user-btn.is-active {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--tint-2);
     color: var(--white);
 }
 
@@ -582,7 +737,7 @@ button, a, .onoff, input, textarea, select {
     margin: 0 4px;
 }
 .word-detail-link:hover {
-    background-color: rgba(186, 236, 255, 0.12);
+    background-color: var(--tint-hover);
 }
 
 /* 通用文字按钮（无边框无背景，浅蓝文字，如"从Excel导入"） */
@@ -596,7 +751,7 @@ button, a, .onoff, input, textarea, select {
     border-radius: 6px;
 }
 .text-btn:hover {
-    background-color: rgba(186, 236, 255, 0.12);
+    background-color: var(--tint-hover);
 }
 
 /* 页面加载遮罩：数据未加载完成前覆盖全屏，页面变灰 + 转圈 + 加载中 */
@@ -664,6 +819,11 @@ button, a, .onoff, input, textarea, select {
     font-size: 0.95rem;
 }
 
+/* 依赖项关闭时整行置灰（如语音总开关关闭时的自动播放） */
+.setting-row.disabled {
+    opacity: 0.45;
+}
+
 /* 选项详细设置分组：加深背景 + 左右留白 */
 .option-sub-box {
     background-color: var(--bg-sub-box);
@@ -691,6 +851,80 @@ button, a, .onoff, input, textarea, select {
     line-height: 1.2;
     cursor: pointer;
     margin-left: 8px;
+}
+
+/* 设置分页：单词设置 / 语音设置 */
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+
+.settings-tab {
+    flex: 1 1 0;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 6px 0 7px;
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+    color: var(--text-tertiary);
+}
+
+.settings-tab.active {
+    color: var(--highlight);
+    border-bottom-color: var(--highlight);
+}
+
+/* 语音设置：音色数量与音色列表（只读） */
+.voice-count {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.voice-list {
+    max-height: 120px;
+    overflow-y: auto;
+    background-color: var(--bg-sub-box);
+    border-radius: 8px;
+    padding: 6px 12px;
+    margin: 2px 0 6px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-tertiary);
+    word-break: break-word;
+}
+
+.voice-item {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.voice-item .voice-name {
+    display: block;
+}
+
+.voice-item .voice-meta {
+    display: block;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: var(--text-dim);
+}
+
+.voice-item .voice-cur {
+    color: var(--highlight);
+}
+
+.voice-empty {
+    color: var(--text-dim);
 }
 
 /* 语音语言行的「检测」小按钮：与问号图标同等分量 */
@@ -841,7 +1075,7 @@ button, a, .onoff, input, textarea, select {
     width: 100%;
     margin-top: 0.6rem;
     padding: 0.6rem 0.75rem;
-    background-color: rgba(245, 108, 108, 0.12);
+    background-color: var(--tint-danger);
     border: 1px solid var(--danger);
     border-radius: 6px;
     font-size: 0.85rem;
@@ -985,12 +1219,12 @@ button, a, .onoff, input, textarea, select {
     appearance: none;
     width: 33px;
     height: 17px;
-    background: var(--text-soft);
+    background: var(--toggle-off-bg);
     border-radius: 17px;
     position: relative;
     cursor: pointer;
     outline: none;
-    border: 1px solid var(--text-soft-2);
+    border: 1px solid var(--toggle-off-border);
     vertical-align: middle;
     margin-left: 8px;
 }
@@ -1043,9 +1277,9 @@ button:hover:not(:disabled) {
 }
 
 button:disabled {
-    background-color: var(--text-faint-2) !important;
+    background-color: var(--disabled-bg) !important;
     cursor: not-allowed !important;
-    color: var(--text-faint-4) !important;
+    color: var(--disabled-fg) !important;
 }
 
 button.check1 {
@@ -1073,7 +1307,7 @@ button.danger:hover:not(:disabled) {
 }
 
 button.options {
-    background-color: var(--text-faint-3);
+    background-color: var(--option-bg);
     color: var(--black);
     font-weight: bold;
     text-align: left;
@@ -1085,7 +1319,7 @@ button.options {
 }
 
 button.options:hover:not(:disabled) {
-    background-color: var(--text-faint);
+    background-color: var(--option-bg-hover);
 }
 
 /* 等待期锁定：只挡点击，不套用禁用配色，正确/错误的绿红块保持可见 */
@@ -1329,6 +1563,79 @@ input[type="text"]:focus, input[type="search"]:focus {
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 0.75rem;
+}
+
+/* ---- JMdict 日语词条（按词典自身结构展示） ---- */
+.ja-forms {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    margin-top: 4px;
+}
+
+.ja-meta {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin: 8px 0 2px;
+}
+
+.ja-senses {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ja-sense-zh {
+    line-height: 1.6;
+    color: var(--text-main);
+}
+
+.ja-pos {
+    color: var(--accent);
+    font-size: 0.82rem;
+    margin-right: 2px;
+}
+
+.ja-context {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.ja-sense-en {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    margin-top: 2px;
+}
+
+.ja-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ja-example-jp {
+    line-height: 1.6;
+    color: var(--text-main);
+}
+
+.ja-example-lv {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin-left: 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 4px;
+}
+
+.ja-example-zh {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    margin-top: 2px;
+}
+
+.ja-entry-id {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin-top: 14px;
 }
 
 .dict-empty {
@@ -1907,57 +2214,23 @@ input.spell-input {
     font-size: 12px;
     color: var(--text-secondary);
 }
-/* 预设词表：箭头融入词典行框内、完全右下角（纯箭头，无背景无间隔）；点击后行下方推出深色展开区 */
-.dict-preset-btn {
-    position: absolute;
-    left: 50%;
-    bottom: 6px;
-    margin: 0 0 0 -9px; /* 水平居中（18px 宽的一半），垂直位于行底部 */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 14px; /* 与图标同高，取消上下内边距 */
-    padding: 0;
-    background: transparent;
-    color: var(--text-secondary);
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    line-height: 1;
-    transition: transform 0.15s ease, color 0.15s ease;
-}
-.dict-preset-btn:hover:not(:disabled) {
-    color: var(--text-secondary); /* 悬停不变蓝 */
-    background-color: transparent; /* 悬停不变色（覆盖全局 button:hover 背景） */
-}
-.dict-preset-btn.open {
-    transform: rotate(180deg);
-    color: var(--text-secondary); /* 展开不变蓝 */
-}
-/* 展开区：深色框，位于词典行下方（文档流内，展开时把下方内容往下推） */
-.dict-preset-expand {
-    display: none;
-    position: relative;
-    z-index: 0; /* 堆叠顺序小于词典行 */
-    margin-top: -10px; /* 抵消 .dict-list 的 flex gap，紧贴上方词典行 */
-    padding: 12px;
+/* 预设词表：独立区块（深色框），内含「补全用词典」下拉框与词表胶囊 */
+.preset-panel {
+    padding: 12px 14px;
     background-color: var(--bg-deep);
     border: 1px solid var(--border);
     border-radius: 8px;
-    opacity: 0;
-    transform: translateY(-8px);
-    transition: opacity 0.25s ease, transform 0.25s ease;
 }
-.dict-preset-expand.open {
-    opacity: 1;
-    transform: translateY(0);
+.preset-dict-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
 }
-/* 展开区顶部文字提示 */
-.preset-tip {
-    font-size: 0.75rem;
+.preset-dict-label {
+    font-size: 0.8rem;
     color: var(--text-secondary);
-    margin-bottom: 10px;
 }
 .preset-chips {
     display: flex;
@@ -1974,7 +2247,7 @@ input.spell-input {
     padding: 5px 12px;
     margin: 0; /* 覆盖全局 button 的 margin-bottom */
     background-color: var(--bg-panel);
-    color: var(--text-primary);
+    color: var(--text-main);
     border: 1px solid var(--border);
     border-radius: 999px; /* 胶囊标签 */
     cursor: pointer;
@@ -2043,11 +2316,6 @@ input.spell-input {
     .dict-status {
         padding: 2px 8px;
         font-size: 11px;
-    }
-    .dict-preset-btn {
-        width: 16px;
-        height: 12px;
-        margin-left: -8px;
     }
     /* ---------- 移动端：侧边栏按钮缩小（设置/添加单词/查看/编辑/删除/新建） ---------- */
     .footer-icon-btn {
@@ -2280,7 +2548,7 @@ input.spell-input {
     transition: background-color .15s ease, color .15s ease;
 }
 .saved-add-list-card:hover {
-    background-color: rgba(255,255,255,.05);
+    background-color: var(--tint-card);
     color: var(--accent);
 }
 @media (max-width: 480px) {
@@ -2766,6 +3034,17 @@ input.spell-input {
 
 /* 窄屏（手机）：压缩留白、行高与字号，让一屏显示更多 */
 @media (max-width: 560px) {
+    .settings-tab {
+        font-size: 0.82rem;
+        padding: 5px 0 6px;
+    }
+
+    .voice-list {
+        max-height: 96px;
+        font-size: 0.76rem;
+        padding: 5px 10px;
+    }
+
     .dt-form {
         flex-direction: column;
         align-items: stretch;
