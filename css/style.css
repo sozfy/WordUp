@@ -884,7 +884,7 @@ button, a, .onoff, input, textarea, select {
     border-bottom-color: var(--highlight);
 }
 
-/* 语音设置：音色数量与音色列表（只读） */
+/* 语音设置：音色数量与音色列表（点击切换音色） */
 .voice-count {
     color: var(--text-secondary);
     font-size: 0.82rem;
@@ -903,9 +903,35 @@ button, a, .onoff, input, textarea, select {
     word-break: break-word;
 }
 
+/* 每条音色是一枚按钮：整行可点，手选中的一条描边高亮 */
 .voice-item {
     display: block;
-    margin-bottom: 5px;
+    width: 100%;
+    min-height: 36px;
+    margin: 0 0 4px;
+    padding: 5px 8px;
+    box-sizing: border-box;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.voice-item:hover {
+    background-color: var(--bg-deep);
+    border-color: var(--border);
+}
+
+.voice-item.on {
+    background-color: var(--bg-deep);
+    border-color: var(--highlight);
 }
 
 .voice-item .voice-name {
@@ -1504,6 +1530,13 @@ input[type="text"]:focus, input[type="search"]:focus {
     font-weight: bold;
     color: var(--highlight);
     margin-bottom: 0.25rem;
+}
+
+/* 可点击发音的单词（显示区之外的弹窗词条）：鼠标变手型，点击触发缩放动画 */
+.dict-word.speakable {
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .dict-phonetic {
@@ -2571,7 +2604,8 @@ input.spell-input {
 
 /* ---------- 用户页（User.html） ---------- */
 .user-page {
-    max-width: 560px;
+    /* 与其他页面同宽：撑满 .container（其 max-width 统一为 900px），不再单独收窄 */
+    width: 100%;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -3043,6 +3077,10 @@ input.spell-input {
         max-height: 96px;
         font-size: 0.76rem;
         padding: 5px 10px;
+    }
+
+    .voice-item {
+        min-height: 40px; /* 手机上整行好点 */
     }
 
     .dt-form {
