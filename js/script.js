@@ -249,6 +249,8 @@ function showWordDetail(word) {
     document.getElementById('wdDetailContent').innerHTML = buildWordDetailHtml(hit.w, hit.listName, extra);
     window._detailWord = String(word); // 供弹窗右上角"查看详细"跳转查词典页使用
     openModal('wordDetailModal');
+    // 详细弹窗里的单词也能点击发音（朗读的就是该词本身，不依赖当前抽中的词）
+    bindSpeakEl(document.querySelector('#wdDetailContent .dict-word'), () => String(hit.w.word || ''));
 }
 
 // 弹窗内翻转单轮循环判定：认识 ↔ 不认识
@@ -1451,7 +1453,7 @@ function applyAutoSpeak() {
 // 语音语言白名单，与设置弹窗 #speakLangSelect 的选项一一对应
 const SPEAK_LANGS = ['en-US', 'en-GB', 'zh-CN', 'fr-FR', 'ru-RU', 'es-ES', 'ar-SA', 'ja-JP', 'ko-KR'];
 const SPEAK_LANG_NAMES = { 'en-US': '英语（美）', 'en-GB': '英语（英）', 'zh-CN': '汉语', 'fr-FR': '法语', 'ru-RU': '俄语', 'es-ES': '西班牙语', 'ar-SA': '阿拉伯语', 'ja-JP': '日语', 'ko-KR': '韩语' };
-let _voiceCache = {}; // { 语言: 语音对象 }，语音列表可能异步加载，取不到时下次再试
+let _voiceCache = {}; // { "语言|音色": 语音对象 }，语音列表可能异步加载，取不到时下次再试
 function getSpeakLang() {
     try {
         const v = localStorage.getItem('speakLang');
@@ -1459,10 +1461,64 @@ function getSpeakLang() {
     } catch (e) { /* 隐私模式等场景忽略 */ }
     return 'en-US';
 }
+// 手动选中的音色：存 voiceURI + name + lang；切语言后若语种不符自动作废
+function getSpeakVoice() {
+    try {
+        const uri = localStorage.getItem('speakVoiceURI') || '';
+        const name = localStorage.getItem('speakVoiceName') || '';
+        if (!uri && !name) return null;
+        const vlang = localStorage.getItem('speakVoiceLang') || '';
+        const base = String(getSpeakLang()).toLowerCase().split('-')[0];
+        if (String(vlang).replace('_', '-').toLowerCase().split('-')[0] !== base) return null;
+        return { uri: uri, name: name, lang: vlang };
+    } catch (e) { return null; }
+}
+function setSpeakVoice(v) {
+    try {
+        if (!v) {
+            localStorage.removeItem('speakVoiceURI');
+            localStorage.removeItem('speakVoiceName');
+            localStorage.removeItem('speakVoiceLang');
+        } else {
+            localStorage.setItem('speakVoiceURI', String(v.voiceURI || ''));
+            localStorage.setItem('speakVoiceName', String(v.name || ''));
+            localStorage.setItem('speakVoiceLang', String(v.lang || ''));
+        }
+    } catch (e) { /* 隐私模式等场景忽略 */ }
+    _voiceCache = {}; // 换了音色，缓存作废
+}
+// 在系统语音列表里找回已保存的那个音色（voiceURI 优先，退回名称比对）
+function findVoiceByStored(voices, sv) {
+    if (!sv || !voices || !voices.length) return null;
+    if (sv.uri) {
+        for (let i = 0; i < voices.length; i++) {
+            if (String(voices[i].voiceURI || '') === sv.uri) return voices[i];
+        }
+    }
+    if (sv.name) {
+        for (let i = 0; i < voices.length; i++) {
+            if (String(voices[i].name || '') === sv.name) return voices[i];
+        }
+    }
+    return null;
+}
+// 音色列表当前一组（供点击时按下标取对象）
+let _voiceHits = [];
+// 点击列表里的某条音色：保存选择 → 重渲染 → 试听一次
+function selectVoice(i) {
+    const v = _voiceHits[i];
+    if (!v) return;
+    setSpeakVoice(v);
+    renderVoiceList();
+    const list = getActiveList();
+    const word = list && list.selectedWord ? String(list.selectedWord.word || '') : '';
+    speakRaw(word || String(v.name || '')); // 试听不受「开启语音」总开关限制
+}
 function applySpeakLang() {
     const sel = document.getElementById('speakLangSelect');
     if (!sel || SPEAK_LANGS.indexOf(sel.value) < 0) return;
     setStored('speakLang', sel.value);
+    setSpeakVoice(null); // 音色跨语种不通用：切语言即清空手选
     _voiceCache = {}; // 语言换了，重新挑语音
     if (!hasVoiceForLang(sel.value)) {
         showToast('当前设备没有「' + (SPEAK_LANG_NAMES[sel.value] || sel.value) + '」语音，只能用系统默认语音朗读', 'warning');
@@ -1492,7 +1548,7 @@ function switchSettingsTab(name) {
     if (voice) voice.classList.toggle('hidden', name !== 'voice');
     if (name === 'voice') renderVoiceList();
 }
-// 语音设置：列出当前语言可用的系统音色（只读展示）
+// 语音设置：列出当前语言可用的系统音色（点击即可选中并试听）
 function renderVoiceList() {
     const listEl = document.getElementById('voiceList');
     if (!listEl) return;
@@ -1515,6 +1571,7 @@ function renderVoiceList() {
         else if (vl.split('-')[0] === base) same.push(all[i]);
     }
     const hits = exact.length ? exact : same; // 有同地区音色就用它们，否则退回同语种
+    _voiceHits = hits; // 点击音色时按下标取对象
     if (countEl) {
         let txt;
         if (exact.length) {
@@ -1533,12 +1590,18 @@ function renderVoiceList() {
             : '未检测到语音，点上面「检测」唤醒后会自动刷新') + '</span>';
         return;
     }
+    const sv = getSpeakVoice();
+    const picked = findVoiceByStored(hits, sv);
     listEl.innerHTML = hits.map(function (v, i) {
         const name = escapeHtml(String(v.name || '未命名'));
         const lg = escapeHtml(String(v.lang || ''));
-        return '<span class="voice-item"><span class="voice-name">' + (i + 1) + '. ' + name + '</span>' +
+        // 手选过就标在手选那条上；没手选时第一条即自动挑选的结果
+        const isOn = picked ? v === picked : i === 0;
+        const mark = isOn ? (picked ? '使用中' : '默认') : '';
+        return '<button type="button" class="voice-item' + (isOn ? ' on' : '') + '" onclick="selectVoice(' + i + ')">' +
+            '<span class="voice-name">' + (i + 1) + '. ' + name + '</span>' +
             '<span class="voice-meta">' + lg + (v.localService ? '' : ' · 在线') +
-            (i === 0 ? ' · <span class="voice-cur">当前使用</span>' : '') + '</span></span>';
+            (mark ? ' · <span class="voice-cur">' + mark + '</span>' : '') + '</span></button>';
     }).join('');
 }
 // 手动检测：当前语言是否装了对应语音包（语音列表异步加载，最多等 2 秒）
@@ -1575,6 +1638,8 @@ function pickVoiceFor(lang) {
     const synth = window.speechSynthesis;
     if (!synth || typeof synth.getVoices !== 'function') return null;
     const voices = synth.getVoices() || [];
+    const chosen = findVoiceByStored(voices, getSpeakVoice());
+    if (chosen) return chosen; // 用户手选的音色优先
     const key = String(lang || '').replace('_', '-').toLowerCase();
     const base = key.split('-')[0];
     let sameBase = null;
@@ -1585,26 +1650,63 @@ function pickVoiceFor(lang) {
     }
     return sameBase;
 }
-function speakWord() {
+// 朗读任意文本（显示区、上一个单词详细弹窗都用这里）
+function speakText(text) {
     if (!isSpeakEnabled()) return; // 语音总开关关闭时一律不发声
+    speakRaw(text);
+}
+// 真正发声：试听音色也走这里（不受「开启语音」总开关限制）
+function speakRaw(text) {
     const synth = window.speechSynthesis;
     if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
-    const list = getActiveList();
-    const w = list && list.selectedWord ? String(list.selectedWord.word || '').trim() : '';
+    const w = String(text || '').trim();
     if (!w) return;
     const lang = getSpeakLang();
-    synth.cancel(); // 每次点击只播一次，避免排队叠加
     const u = new SpeechSynthesisUtterance(w);
     u.lang = lang;
     u.rate = 1;
     u.pitch = 1;
-    if (!_voiceCache[lang]) _voiceCache[lang] = pickVoiceFor(lang);
-    if (_voiceCache[lang]) u.voice = _voiceCache[lang];
-    // 安卓上 cancel 后立刻 speak 常常静默失败；iOS 被中断后需要先 resume
-    setTimeout(function () {
-        try { if (synth.paused) synth.resume(); } catch (e) { /* 忽略 */ }
-        try { synth.speak(u); } catch (e) { /* 忽略 */ }
-    }, 60);
+    // 缓存键带音色：手选音色与自动挑选分开缓存，切换后不会串音
+    const sv = getSpeakVoice();
+    const cacheKey = lang + '|' + (sv ? (sv.uri || sv.name || '') : 'auto');
+    if (!_voiceCache[cacheKey]) _voiceCache[cacheKey] = pickVoiceFor(lang);
+    if (_voiceCache[cacheKey]) u.voice = _voiceCache[cacheKey];
+    // 仅在确实正在朗读时打断，避免每次点击都重启语音引擎（这是之前那 60ms 延迟的来源）
+    if (synth.speaking || synth.pending) {
+        try { synth.cancel(); } catch (e) { /* 忽略 */ }
+    }
+    try { if (synth.paused) synth.resume(); } catch (e) { /* 忽略 */ }
+    try { synth.speak(u); } catch (e) { /* 忽略 */ }
+}
+
+// 朗读当前抽中的单词（显示区点击 / 自动播放）
+function speakWord() {
+    const list = getActiveList();
+    speakText(list && list.selectedWord ? String(list.selectedWord.word || '') : '');
+}
+
+// 让任意元素可点击发音：可点手势 + 点击缩放动画 + 朗读 getText() 返回的文本
+function bindSpeakEl(el, getText) {
+    if (!el) return;
+    el.classList.add('speakable');
+    let lastPointerUp = 0;
+    const fire = () => {
+        // 点击缩放动画：先移除再重排，保证连续点击也能重播
+        el.classList.remove('word-tap');
+        void el.offsetWidth;
+        el.classList.add('word-tap');
+        speakText(getText());
+    };
+    el.addEventListener('pointerup', () => {
+        lastPointerUp = Date.now();
+        fire();
+    });
+    el.addEventListener('click', () => {
+        if (Date.now() - lastPointerUp < 400) return; // 同一次触摸的 click 不重复朗读
+        fire();
+    });
+    // 动画结束后清掉类名，避免残留（下次点击会重新移除并触发）
+    el.addEventListener('animationend', () => el.classList.remove('word-tap'));
 }
 
 function applyPhonetic() {
