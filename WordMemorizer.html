@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#3a3c44">
     <script>try{if(localStorage.getItem('theme')==='light'){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name="theme-color"]');if(m)m.content='#edf1f6'}}catch(e){}</script>
     <title>背单词</title>
-    <link rel="stylesheet" href="css/style.css?v=157">
+    <link rel="stylesheet" href="css/style.css?v=160">
 </head>
 <body>
 <!-- 页面加载遮罩：加载完成前显示 -->
@@ -191,7 +191,7 @@
                         <input type="checkbox" class="onoff" id="autoSpeakBtn" onclick="applyAutoSpeak()">
                     </div>
                     <div class="setting-row">
-                        <span>音色 <i class="opt-help" onclick="event.stopPropagation();showHelp('当前语言可用的系统音色，朗读时按列表顺序自动挑选')">?</i></span>
+                        <span>音色 <i class="opt-help" onclick="event.stopPropagation();showHelp('点击列表中任意音色即可切换，切换后立即试听一次；未手动选择时按列表顺序自动挑选')">?</i></span>
                         <span class="voice-count" id="voiceCount">检测中…</span>
                     </div>
                     <div class="voice-list" id="voiceList"></div>
@@ -347,7 +347,7 @@
     <script src="js/lib/xlsx.core.min.js"></script>
     <script src="js/common.js?v=32"></script>
     <!-- 预设词表只在「我的词典」页使用，本页不再加载（省去约 3.7MB 的静态数据解析） -->
-    <script src="js/script.js?v=61"></script>
+    <script src="js/script.js?v=64"></script>
 
     <!-- 自定义提示框 -->
     <div id="appToast"></div>
